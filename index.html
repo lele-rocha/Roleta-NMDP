@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Roleta NMDP</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <h1>Roleta NMDP</h1>
+      <p class="subtitle">Cole os nomes abaixo e gire a roleta!</p>
+    </header>
+
+    <main class="main">
+      <aside class="sidebar">
+        <nav class="sidebar-tabs" role="tablist" aria-label="Sidebar">
+          <button
+            class="sidebar-tab active"
+            id="tab-btn-names"
+            type="button"
+            role="tab"
+            aria-selected="true"
+            aria-controls="tab-names"
+            data-tab="names"
+          >
+            Names List
+          </button>
+          <button
+            class="sidebar-tab"
+            id="tab-btn-settings"
+            type="button"
+            role="tab"
+            aria-selected="false"
+            aria-controls="tab-settings"
+            data-tab="settings"
+          >
+            Settings
+          </button>
+        </nav>
+
+        <div class="tab-panels">
+          <div
+            class="tab-panel active"
+            id="tab-names"
+            role="tabpanel"
+            aria-labelledby="tab-btn-names"
+          >
+            <label for="names-input" class="label">Nomes (um por linha)</label>
+            <textarea
+              id="names-input"
+              class="names-input"
+              rows="12"
+              placeholder="Maria&#10;João&#10;Ana&#10;Pedro&#10;..."
+            ></textarea>
+            <p class="name-count" id="name-count">0 nomes</p>
+          </div>
+
+          <div
+            class="tab-panel"
+            id="tab-settings"
+            role="tabpanel"
+            aria-labelledby="tab-btn-settings"
+            hidden
+          >
+            <div class="setting-group">
+              <div class="setting-header">
+                <label for="spin-duration" class="label">Spin Duration</label>
+                <span class="setting-value" id="spin-duration-value">5.0s</span>
+              </div>
+              <p class="setting-desc">Control how long the wheel spins before stopping.</p>
+              <div class="slider-row">
+                <span class="slider-label">Fast</span>
+                <input
+                  type="range"
+                  id="spin-duration"
+                  class="range-slider"
+                  min="1"
+                  max="30"
+                  step="0.5"
+                  value="5"
+                >
+                <span class="slider-label">Slow</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="sidebar-footer">
+          <button id="spin-btn" class="btn-spin" type="button" disabled>
+            <span class="btn-spin__icon" aria-hidden="true">⟳</span>
+            Girar
+          </button>
+        </div>
+      </aside>
+
+      <section class="panel panel-wheel">
+        <div class="wheel-wrapper">
+          <div class="pointer" aria-hidden="true"></div>
+          <canvas id="wheel-canvas" width="480" height="480"></canvas>
+          <div class="wheel-center" aria-hidden="true"></div>
+        </div>
+        <p class="wheel-hint" id="wheel-hint">Adicione pelo menos 2 nomes para girar</p>
+      </section>
+    </main>
+
+    <div class="winner-overlay" id="winner-overlay" hidden>
+      <div class="winner-card">
+        <p class="winner-label">Vencedor</p>
+        <h2 class="winner-name" id="winner-name"></h2>
+        <button id="close-winner-btn" class="btn-close" type="button">Fechar</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
