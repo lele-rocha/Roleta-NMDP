@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Roleta NMDP - Voting Gallery</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="app">
+    <nav class="top-nav">
+      <div class="top-nav__brand">Roleta NMDP</div>
+      <div class="top-nav__links">
+        <a href="wheel.html" class="top-nav__link">🎡 Wheel</a>
+        <a href="voting.html" class="top-nav__link active">🗳️ Voting Gallery</a>
+      </div>
+    </nav>
+
+    <main class="voting-main">
+      <section class="voting-controls">
+        <h2 class="voting-title">Adicionar Novo Card</h2>
+
+        <div class="voting-form">
+          <div class="setting-group">
+            <label class="label" for="card-title-input">Título do Card</label>
+            <input type="text" id="card-title-input" class="input-text" placeholder="Digite o título" />
+          </div>
+
+          <div class="setting-group">
+            <label class="label" for="card-image-input">Imagem do Card</label>
+            <p class="setting-desc">Escolha um arquivo ou cole com Ctrl+V</p>
+            <div class="file-upload-row">
+              <label for="card-image-input" class="btn-secondary">Escolher Imagem</label>
+              <input type="file" id="card-image-input" accept="image/*" class="hidden-file-input" />
+            </div>
+            <div id="card-image-preview" class="card-image-preview" hidden>
+              <img id="card-preview-img" src="" alt="Preview" />
+              <button type="button" id="remove-card-preview" class="btn-danger" style="margin-top:0.5rem;">Remover Imagem</button>
+            </div>
+          </div>
+
+          <button type="button" id="add-card-btn" class="btn-primary">Adicionar Card</button>
+        </div>
+      </section>
+
+      <section class="voting-gallery">
+        <div class="voting-gallery-header">
+          <h2 class="voting-title">Galeria de Votos</h2>
+          <div class="voting-sort-row">
+            <label class="label" for="card-sort-select" style="margin-bottom:0;">Ordenar:</label>
+            <select id="card-sort-select">
+              <option value="date">Data (Novos Primeiro)</option>
+              <option value="votes">Votos (Mais Votados)</option>
+            </select>
+          </div>
+        </div>
+        <p id="cards-empty-msg" class="cards-empty-msg">Nenhum card adicionado ainda. Crie o primeiro acima!</p>
+        <div id="cards-container" class="cards-grid"></div>
+      </section>
+    </main>
+  </div>
+  <script src="voting.js"></script>
+</body>
+</html>
