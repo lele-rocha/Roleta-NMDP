@@ -4,6 +4,7 @@
   const STORAGE_KEY = "roleta-nmdp-cards";
 
   const cardTitleInput = document.getElementById("card-title-input");
+  const cardDescInput = document.getElementById("card-desc-input");
   const cardImageInput = document.getElementById("card-image-input");
   const addCardBtn = document.getElementById("add-card-btn");
   const cardSortSelect = document.getElementById("card-sort-select");
@@ -13,8 +14,20 @@
   const cardPreviewImg = document.getElementById("card-preview-img");
   const removeCardPreview = document.getElementById("remove-card-preview");
 
+  // Dropdown toggle controls
+  const toggleControlsBtn = document.getElementById("toggle-controls-btn");
+  const votingControlsDropdown = document.getElementById("voting-controls-dropdown");
+
+  // Edit Card Modal elements
+  const editOverlay = document.getElementById("edit-overlay");
+  const editTitleInput = document.getElementById("edit-title-input");
+  const editDescInput = document.getElementById("edit-desc-input");
+  const saveEditBtn = document.getElementById("save-edit-btn");
+  const cancelEditBtn = document.getElementById("cancel-edit-btn");
+
   let cards = [];
   let pendingImageDataUrl = null;
+  let editingCardId = null;
 
   // --- localStorage persistence ---
   function loadCards() {
@@ -28,6 +41,7 @@
     }
   }
 
+  // --- Save cards ---
   function saveCards() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(cards));
   }
@@ -54,6 +68,7 @@
     sorted.forEach((card) => {
       const el = document.createElement("div");
       el.className = "vote-card";
+      el.dataset.id = card.id;
       el.innerHTML = `
         <div class="vote-card__img-wrap">
           ${card.imageDataUrl
@@ -63,37 +78,44 @@
         </div>
         <div class="vote-card__body">
           <h3 class="vote-card__title">${escapeHtml(card.title)}</h3>
+          ${card.description ? `<p class="vote-card__desc">${escapeHtml(card.description)}</p>` : ""}
           <p class="vote-card__date">${formatDate(card.timestamp)}</p>
           <div class="vote-card__actions">
-            <button class="btn-vote" data-id="${card.id}">❤️ ${card.votes}</button>
+            <button class="btn-vote" tabindex="-1">❤️ ${card.votes}</button>
+            <button class="btn-edit-card" data-id="${card.id}">✏️</button>
             <button class="btn-delete-card" data-id="${card.id}">🗑️</button>
           </div>
         </div>
       `;
-      cardsContainer.appendChild(el);
-    });
 
-    // Attach vote listeners
-    cardsContainer.querySelectorAll(".btn-vote").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const id = btn.dataset.id;
-        const card = cards.find((c) => c.id === id);
-        if (card) {
-          card.votes++;
-          saveCards();
-          renderCards();
+      // Vote on card click (excluding delete/edit buttons)
+      el.addEventListener("click", (e) => {
+        if (e.target.closest(".btn-delete-card") || e.target.closest(".btn-edit-card")) {
+          return;
         }
-      });
-    });
-
-    // Attach delete listeners
-    cardsContainer.querySelectorAll(".btn-delete-card").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const id = btn.dataset.id;
-        cards = cards.filter((c) => c.id !== id);
+        card.votes++;
         saveCards();
         renderCards();
       });
+
+      // Edit listener
+      el.querySelector(".btn-edit-card").addEventListener("click", (e) => {
+        e.stopPropagation();
+        editingCardId = card.id;
+        editTitleInput.value = card.title;
+        editDescInput.value = card.description || "";
+        editOverlay.hidden = false;
+      });
+
+      // Delete listener
+      el.querySelector(".btn-delete-card").addEventListener("click", (e) => {
+        e.stopPropagation();
+        cards = cards.filter((c) => c.id !== card.id);
+        saveCards();
+        renderCards();
+      });
+
+      cardsContainer.appendChild(el);
     });
   }
 
@@ -178,9 +200,12 @@
       return;
     }
 
+    const description = cardDescInput.value.trim();
+
     const newCard = {
       id: generateId(),
       title: title,
+      description: description || null,
       imageDataUrl: pendingImageDataUrl,
       timestamp: Date.now(),
       votes: 0,
@@ -192,7 +217,52 @@
 
     // Reset form
     cardTitleInput.value = "";
+    cardDescInput.value = "";
     clearPreview();
+  });
+
+  // --- Dropdown Toggle ---
+  toggleControlsBtn.addEventListener("click", () => {
+    const isHidden = votingControlsDropdown.hidden;
+    votingControlsDropdown.hidden = !isHidden;
+    toggleControlsBtn.classList.toggle("open", isHidden);
+  });
+
+  // --- Edit Modal Handlers ---
+  saveEditBtn.addEventListener("click", () => {
+    const title = editTitleInput.value.trim();
+    if (!title) {
+      editTitleInput.focus();
+      return;
+    }
+    const card = cards.find((c) => c.id === editingCardId);
+    if (card) {
+      card.title = title;
+      card.description = editDescInput.value.trim() || null;
+      saveCards();
+      renderCards();
+    }
+    editOverlay.hidden = true;
+    editingCardId = null;
+  });
+
+  cancelEditBtn.addEventListener("click", () => {
+    editOverlay.hidden = true;
+    editingCardId = null;
+  });
+
+  editOverlay.addEventListener("click", (e) => {
+    if (e.target === editOverlay) {
+      editOverlay.hidden = true;
+      editingCardId = null;
+    }
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !editOverlay.hidden) {
+      editOverlay.hidden = true;
+      editingCardId = null;
+    }
   });
 
   // --- Sort change ---

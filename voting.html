@@ -20,31 +20,41 @@
     </nav>
 
     <main class="voting-main">
-      <section class="voting-controls">
-        <h2 class="voting-title">Adicionar Novo Card</h2>
-
-        <div class="voting-form">
-          <div class="setting-group">
-            <label class="label" for="card-title-input">Título do Card</label>
-            <input type="text" id="card-title-input" class="input-text" placeholder="Digite o título" />
-          </div>
-
-          <div class="setting-group">
-            <label class="label" for="card-image-input">Imagem do Card</label>
-            <p class="setting-desc">Escolha um arquivo ou cole com Ctrl+V</p>
-            <div class="file-upload-row">
-              <label for="card-image-input" class="btn-secondary">Escolher Imagem</label>
-              <input type="file" id="card-image-input" accept="image/*" class="hidden-file-input" />
+      <!-- Collapsible voting controls container -->
+      <div class="voting-controls-wrapper">
+        <button type="button" id="toggle-controls-btn" class="btn-toggle-controls">
+          <span class="btn-toggle-controls__text">➕ Adicionar Novo Card</span>
+          <span class="chevron" id="toggle-chevron">▼</span>
+        </button>
+        <div id="voting-controls-dropdown" class="voting-controls-dropdown" hidden>
+          <div class="voting-form">
+            <div class="setting-group">
+              <label class="label" for="card-title-input">Título do Card</label>
+              <input type="text" id="card-title-input" class="input-text" placeholder="Digite o título" />
             </div>
-            <div id="card-image-preview" class="card-image-preview" hidden>
-              <img id="card-preview-img" src="" alt="Preview" />
-              <button type="button" id="remove-card-preview" class="btn-danger" style="margin-top:0.5rem;">Remover Imagem</button>
-            </div>
-          </div>
 
-          <button type="button" id="add-card-btn" class="btn-primary">Adicionar Card</button>
+            <div class="setting-group">
+              <label class="label" for="card-desc-input">Descrição do Card</label>
+              <textarea id="card-desc-input" class="input-text" rows="3" placeholder="Digite a descrição (opcional)"></textarea>
+            </div>
+
+            <div class="setting-group">
+              <label class="label" for="card-image-input">Imagem do Card</label>
+              <p class="setting-desc">Escolha um arquivo ou cole com Ctrl+V</p>
+              <div class="file-upload-row">
+                <label for="card-image-input" class="btn-secondary">Escolher Imagem</label>
+                <input type="file" id="card-image-input" accept="image/*" class="hidden-file-input" />
+              </div>
+              <div id="card-image-preview" class="card-image-preview" hidden>
+                <img id="card-preview-img" src="" alt="Preview" />
+                <button type="button" id="remove-card-preview" class="btn-danger" style="margin-top:0.5rem;">Remover Imagem</button>
+              </div>
+            </div>
+
+            <button type="button" id="add-card-btn" class="btn-primary">Adicionar Card</button>
+          </div>
         </div>
-      </section>
+      </div>
 
       <section class="voting-gallery">
         <div class="voting-gallery-header">
@@ -62,6 +72,26 @@
       </section>
     </main>
   </div>
+
+  <!-- Edit Card Modal Overlay -->
+  <div class="edit-overlay" id="edit-overlay" hidden>
+    <div class="edit-modal">
+      <h2 class="edit-modal__title">Editar Card</h2>
+      <div class="setting-group">
+        <label class="label" for="edit-title-input">Título do Card</label>
+        <input type="text" id="edit-title-input" class="input-text" />
+      </div>
+      <div class="setting-group" style="margin-top: 1rem;">
+        <label class="label" for="edit-desc-input">Descrição do Card</label>
+        <textarea id="edit-desc-input" class="input-text" rows="3"></textarea>
+      </div>
+      <div class="edit-modal__actions" style="margin-top: 1.5rem; display: flex; gap: 0.75rem; justify-content: flex-end;">
+        <button type="button" id="cancel-edit-btn" class="btn-secondary">Cancelar</button>
+        <button type="button" id="save-edit-btn" class="btn-primary">Salvar</button>
+      </div>
+    </div>
+  </div>
+
   <script src="voting.js"></script>
 </body>
 </html>
