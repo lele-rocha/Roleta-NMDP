@@ -41,6 +41,17 @@
           >
             Settings
           </button>
+          <button
+            class="sidebar-tab"
+            id="tab-btn-audio"
+            type="button"
+            role="tab"
+            aria-selected="false"
+            aria-controls="tab-audio"
+            data-tab="audio"
+          >
+            Audio
+          </button>
         </nav>
 
         <div class="tab-panels">
@@ -89,28 +100,6 @@
             </div>
 
             <div class="setting-group" style="margin-top: 1.5rem;">
-              <label class="label">Biblioteca de Áudio</label>
-              <p class="setting-desc">Faça upload de arquivos de áudio para usar ao girar a roleta.</p>
-              <div class="file-upload-row">
-                <label for="audio-library-input" class="btn-secondary">Escolher Áudios</label>
-                <input type="file" id="audio-library-input" accept="audio/*" multiple class="hidden-file-input">
-                <button type="button" id="remove-audio-btn" class="btn-danger" style="display: none;">Remover Todos</button>
-              </div>
-              <ul id="audio-list" style="margin-top: 0.5rem; list-style: none; padding: 0;"></ul>
-            </div>
-            <div class="setting-group" style="margin-top: 1.5rem;">
-              <label class="label">Modo de Áudio</label>
-              <p class="setting-desc">Escolha como o áudio será tocado ao selecionar um vencedor.</p>
-              <select id="audio-mode-select" class="range-slider" style="width: 100%; margin-top: 0.5rem;">
-                <option value="random">Som Aleatório</option>
-                <option value="fixed">Som Fixo</option>
-              </select>
-              <select id="audio-fixed-select" class="range-slider" style="width: 100%; margin-top: 0.5rem; display: none;">
-                <!-- options filled dynamically -->
-              </select>
-            </div>
-
-            <div class="setting-group" style="margin-top: 1.5rem;">
               <label class="label">Imagem Central</label>
               <p class="setting-desc">Adicione uma imagem no centro da roleta (gira junto com ela).</p>
               <div class="file-upload-row">
@@ -130,7 +119,57 @@
               </div>
             </div>
           </div>
-        </div>
+<div class="tab-panel" id="tab-settings" role="tabpanel" aria-labelledby="tab-btn-settings" hidden>
+  <div class="setting-group">
+    <div class="setting-header">
+      <label for="spin-duration" class="label">Spin Duration</label>
+      <span class="setting-value" id="spin-duration-value">5.0s</span>
+    </div>
+    <p class="setting-desc">Control how long the wheel spins before stopping.</p>
+    <div class="slider-row">
+      <span class="slider-label">Fast</span>
+      <input type="range" id="spin-duration" class="range-slider" min="1" max="30" step="0.5" value="5">
+      <span class="slider-label">Slow</span>
+    </div>
+  </div>
+  <div class="setting-group" style="margin-top: 1.5rem;">
+    <label class="label">Imagem Central</label>
+    <p class="setting-desc">Adicione uma imagem no centro da roleta (gira junto com ela).</p>
+    <div class="file-upload-row">
+      <label for="center-image-input" class="btn-secondary">Escolher Imagem</label>
+      <input type="file" id="center-image-input" accept="image/*" class="hidden-file-input">
+      <button type="button" id="remove-center-image-btn" class="btn-danger" style="display: none;">Remover</button>
+    </div>
+  </div>
+  <div class="setting-group" style="margin-top: 1.5rem;">
+    <label class="label">Imagem de Fundo</label>
+    <p class="setting-desc">Envie uma imagem para definir como plano de fundo da página.</p>
+    <div class="file-upload-row">
+      <label for="bg-image-input" class="btn-secondary">Escolher Imagem</label>
+      <input type="file" id="bg-image-input" accept="image/*" class="hidden-file-input">
+      <button type="button" id="remove-bg-image-btn" class="btn-danger" style="display: none;">Remover</button>
+    </div>
+  </div>
+</div>
+<div class="tab-panel" id="tab-audio" role="tabpanel" aria-labelledby="tab-btn-audio" hidden>
+  <div class="setting-group">
+    <label class="label">Biblioteca de Áudios</label>
+    <div class="file-upload-row">
+      <label for="audio-library-input" class="btn-secondary">Adicionar Áudios</label>
+      <input type="file" id="audio-library-input" accept=".mp3,.wav,audio/*" multiple class="hidden-file-input">
+      <button type="button" id="remove-audio-btn" class="btn-danger" style="display:none;">Remover Todos</button>
+    </div>
+    <ul id="audio-list"></ul>
+  </div>
+  <div class="setting-group">
+    <label class="label">Modo de Reprodução</label>
+    <select id="audio-mode-select">
+      <option value="random">Som Aleatório</option>
+      <option value="fixed">Som Fixo</option>
+    </select>
+    <select id="audio-fixed-select" style="display:none;"></select>
+  </div>
+</div>
 
         <div class="sidebar-footer">
           <button id="spin-btn" class="btn-spin" type="button" disabled>
