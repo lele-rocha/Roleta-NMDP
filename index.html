@@ -110,9 +110,12 @@
 
     <div class="winner-overlay" id="winner-overlay" hidden>
       <div class="winner-card">
-        <p class="winner-label">Vencedor</p>
+        <p class="winner-label" id="winner-label">Vencedor</p>
         <h2 class="winner-name" id="winner-name"></h2>
-        <button id="close-winner-btn" class="btn-close" type="button">Fechar</button>
+        <div class="winner-actions" id="winner-actions">
+          <button id="confirm-winner-btn" class="btn-confirm" type="button">Confirmar</button>
+          <button id="close-winner-btn" class="btn-close" type="button">Fechar</button>
+        </div>
       </div>
     </div>
   </div>

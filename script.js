@@ -9,6 +9,8 @@
   const wheelHint = document.getElementById("wheel-hint");
   const winnerOverlay = document.getElementById("winner-overlay");
   const winnerNameEl = document.getElementById("winner-name");
+  const winnerLabelEl = document.getElementById("winner-label");
+  const confirmWinnerBtn = document.getElementById("confirm-winner-btn");
   const closeWinnerBtn = document.getElementById("close-winner-btn");
   const spinDurationSlider = document.getElementById("spin-duration");
   const spinDurationValue = document.getElementById("spin-duration-value");
@@ -211,15 +213,20 @@
       wheelHint.textContent = "Clique em Girar para sortear!";
     }
 
-    if (!isSpinning) {
-      winningIndex = -1;
-    }
-
     drawWheel();
   }
 
   function showWinner(name) {
     winnerNameEl.textContent = name;
+    if (names.length > 2) {
+      winnerLabelEl.textContent = "Nome Sorteado";
+      confirmWinnerBtn.style.display = "";
+      closeWinnerBtn.textContent = "Cancelar";
+    } else {
+      winnerLabelEl.textContent = "Vencedor";
+      confirmWinnerBtn.style.display = "none";
+      closeWinnerBtn.textContent = "Fechar";
+    }
     winnerOverlay.hidden = false;
   }
 
@@ -227,11 +234,19 @@
     winnerOverlay.hidden = true;
   }
 
+  function removeName(index) {
+    if (index >= 0 && index < names.length) {
+      names.splice(index, 1);
+      namesInput.value = names.join("\n");
+      winningIndex = -1;
+      updateUI();
+    }
+  }
+
   function stopSpin() {
     isSpinning = false;
     spinBtn.classList.remove("spinning");
     winningIndex = getWinnerIndex();
-    drawWheel();
     updateUI();
 
     const winner = names[winningIndex];
@@ -286,8 +301,17 @@
   });
 
   spinDurationSlider.addEventListener("input", updateDurationLabel);
-  namesInput.addEventListener("input", updateUI);
+  namesInput.addEventListener("input", () => {
+    winningIndex = -1;
+    updateUI();
+  });
   spinBtn.addEventListener("click", spin);
+  confirmWinnerBtn.addEventListener("click", () => {
+    if (winningIndex !== -1) {
+      removeName(winningIndex);
+    }
+    hideWinner();
+  });
   closeWinnerBtn.addEventListener("click", hideWinner);
   winnerOverlay.addEventListener("click", (e) => {
     if (e.target === winnerOverlay) hideWinner();

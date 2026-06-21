@@ -489,6 +489,40 @@ body {
   background: var(--border);
 }
 
+.winner-actions {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+  margin-top: 1.75rem;
+}
+
+.winner-actions .btn-close {
+  margin-top: 0;
+}
+
+.btn-confirm {
+  padding: 0.7rem 2rem;
+  border: none;
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--accent), #a29bfe);
+  color: #fff;
+  font-family: inherit;
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.2s;
+  box-shadow: 0 4px 12px var(--accent-glow);
+}
+
+.btn-confirm:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px var(--accent-glow);
+}
+
+.btn-confirm:active {
+  transform: translateY(0);
+}
+
 @media (max-width: 768px) {
   .main {
     grid-template-columns: 1fr;
