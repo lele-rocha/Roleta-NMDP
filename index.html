@@ -89,6 +89,28 @@
             </div>
 
             <div class="setting-group" style="margin-top: 1.5rem;">
+              <label class="label">Biblioteca de Áudio</label>
+              <p class="setting-desc">Faça upload de arquivos de áudio para usar ao girar a roleta.</p>
+              <div class="file-upload-row">
+                <label for="audio-library-input" class="btn-secondary">Escolher Áudios</label>
+                <input type="file" id="audio-library-input" accept="audio/*" multiple class="hidden-file-input">
+                <button type="button" id="remove-audio-btn" class="btn-danger" style="display: none;">Remover Todos</button>
+              </div>
+              <ul id="audio-list" style="margin-top: 0.5rem; list-style: none; padding: 0;"></ul>
+            </div>
+            <div class="setting-group" style="margin-top: 1.5rem;">
+              <label class="label">Modo de Áudio</label>
+              <p class="setting-desc">Escolha como o áudio será tocado ao selecionar um vencedor.</p>
+              <select id="audio-mode-select" class="range-slider" style="width: 100%; margin-top: 0.5rem;">
+                <option value="random">Som Aleatório</option>
+                <option value="fixed">Som Fixo</option>
+              </select>
+              <select id="audio-fixed-select" class="range-slider" style="width: 100%; margin-top: 0.5rem; display: none;">
+                <!-- options filled dynamically -->
+              </select>
+            </div>
+
+            <div class="setting-group" style="margin-top: 1.5rem;">
               <label class="label">Imagem Central</label>
               <p class="setting-desc">Adicione uma imagem no centro da roleta (gira junto com ela).</p>
               <div class="file-upload-row">

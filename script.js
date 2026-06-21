@@ -21,7 +21,89 @@
   const bgImageInput = document.getElementById("bg-image-input");
   const removeBgImageBtn = document.getElementById("remove-bg-image-btn");
   const wheelCenterEl = document.querySelector(".wheel-center");
+  // Audio library state
+  let audioLibrary = [];
+  let currentAudio = null;
 
+  const audioLibraryInput = document.getElementById("audio-library-input");
+  const audioListEl = document.getElementById("audio-list");
+  const removeAudioBtn = document.getElementById("remove-audio-btn");
+  const audioModeSelect = document.getElementById("audio-mode-select");
+  const audioFixedSelect = document.getElementById("audio-fixed-select");
+  // Helper to refresh UI for audio library
+  function refreshAudioUI() {
+    // Update list
+    audioListEl.innerHTML = "";
+    audioLibrary.forEach((item, idx) => {
+      const li = document.createElement("li");
+      li.textContent = item.name;
+      const removeBtn = document.createElement("button");
+      removeBtn.textContent = "Remover";
+      removeBtn.className = "btn-danger";
+      removeBtn.style.marginLeft = "0.5rem";
+      removeBtn.addEventListener("click", () => {
+        audioLibrary.splice(idx, 1);
+        refreshAudioUI();
+      });
+      li.appendChild(removeBtn);
+      audioListEl.appendChild(li);
+    });
+    removeAudioBtn.style.display = audioLibrary.length ? "inline-block" : "none";
+
+    // Populate fixed-select options
+    audioFixedSelect.innerHTML = "";
+    audioLibrary.forEach((item, idx) => {
+      const opt = document.createElement("option");
+      opt.value = idx;
+      opt.textContent = item.name;
+      audioFixedSelect.appendChild(opt);
+    });
+    // Show/hide fixed select based on mode
+    if (audioModeSelect.value === "fixed") {
+      audioFixedSelect.style.display = "block";
+    } else {
+      audioFixedSelect.style.display = "none";
+    }
+  }
+
+  audioLibraryInput.addEventListener("change", (e) => {
+    const files = Array.from(e.target.files);
+    files.forEach((file) => {
+      const url = URL.createObjectURL(file);
+      audioLibrary.push({ name: file.name, url });
+    });
+    e.target.value = "";
+    refreshAudioUI();
+  });
+
+  removeAudioBtn.addEventListener("click", () => {
+    audioLibrary.forEach(item => URL.revokeObjectURL(item.url));
+    audioLibrary = [];
+    refreshAudioUI();
+  });
+
+  audioModeSelect.addEventListener("change", () => {
+    refreshAudioUI();
+  });
+
+  function playWinnerSound() {
+    if (audioLibrary.length === 0) return;
+    let soundUrl;
+    if (audioModeSelect.value === "random") {
+      const idx = Math.floor(Math.random() * audioLibrary.length);
+      soundUrl = audioLibrary[idx].url;
+    } else {
+      const idx = parseInt(audioFixedSelect.value, 10);
+      if (isNaN(idx) || idx < 0 || idx >= audioLibrary.length) return;
+      soundUrl = audioLibrary[idx].url;
+    }
+    if (currentAudio) {
+      currentAudio.pause();
+      currentAudio.currentTime = 0;
+    }
+    currentAudio = new Audio(soundUrl);
+    currentAudio.play().catch(() => {});
+  }
   const POINTER_ANGLE = -Math.PI / 2;
   const MIN_SPINS = 5;
   const MAX_SPINS = 10;
@@ -282,6 +364,8 @@
     updateUI();
 
     const winner = names[winningIndex];
+    // Play sound for winner
+    playWinnerSound();
     if (winner) {
       setTimeout(() => showWinner(winner), 400);
     }
