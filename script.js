@@ -16,6 +16,11 @@
   const spinDurationValue = document.getElementById("spin-duration-value");
   const tabButtons = document.querySelectorAll(".sidebar-tab");
   const tabPanels = document.querySelectorAll(".tab-panel");
+  const centerImageInput = document.getElementById("center-image-input");
+  const removeCenterImageBtn = document.getElementById("remove-center-image-btn");
+  const bgImageInput = document.getElementById("bg-image-input");
+  const removeBgImageBtn = document.getElementById("remove-bg-image-btn");
+  const wheelCenterEl = document.querySelector(".wheel-center");
 
   const POINTER_ANGLE = -Math.PI / 2;
   const MIN_SPINS = 5;
@@ -26,6 +31,7 @@
   let isSpinning = false;
   let animationId = null;
   let winningIndex = -1;
+  let centerImage = null;
   let spinStartTime = 0;
   let spinStartRotation = 0;
   let spinTotalRotation = 0;
@@ -174,6 +180,32 @@
     ctx.strokeStyle = "rgba(255, 255, 255, 0.2)";
     ctx.lineWidth = 3;
     ctx.stroke();
+
+    if (centerImage) {
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(rotation);
+      
+      const imgSize = size * 0.18;
+      const x = -imgSize / 2;
+      const y = -imgSize / 2;
+      
+      ctx.beginPath();
+      ctx.arc(0, 0, imgSize / 2, 0, Math.PI * 2);
+      ctx.clip();
+      
+      ctx.drawImage(centerImage, x, y, imgSize, imgSize);
+      ctx.restore();
+
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.beginPath();
+      ctx.arc(0, 0, imgSize / 2, 0, Math.PI * 2);
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.4)";
+      ctx.lineWidth = 3;
+      ctx.stroke();
+      ctx.restore();
+    }
   }
 
   function normalizeAngle(angle) {
@@ -324,6 +356,56 @@
     if (e.key === "Enter" && e.ctrlKey && !spinBtn.disabled) {
       spin();
     }
+  });
+
+  centerImageInput.addEventListener("change", (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => {
+          centerImage = img;
+          wheelCenterEl.style.display = "none";
+          removeCenterImageBtn.style.display = "inline-block";
+          drawWheel();
+        };
+        img.src = event.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+  });
+
+  removeCenterImageBtn.addEventListener("click", () => {
+    centerImage = null;
+    centerImageInput.value = "";
+    wheelCenterEl.style.display = "";
+    removeCenterImageBtn.style.display = "none";
+    drawWheel();
+  });
+
+  bgImageInput.addEventListener("change", (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        document.body.style.backgroundImage = `url('${event.target.result}')`;
+        document.body.style.backgroundSize = "cover";
+        document.body.style.backgroundPosition = "center";
+        document.body.style.backgroundAttachment = "fixed";
+        removeBgImageBtn.style.display = "inline-block";
+      };
+      reader.readAsDataURL(file);
+    }
+  });
+
+  removeBgImageBtn.addEventListener("click", () => {
+    document.body.style.backgroundImage = "";
+    document.body.style.backgroundSize = "";
+    document.body.style.backgroundPosition = "";
+    document.body.style.backgroundAttachment = "";
+    bgImageInput.value = "";
+    removeBgImageBtn.style.display = "none";
   });
 
   updateDurationLabel();
