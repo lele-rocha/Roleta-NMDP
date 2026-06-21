@@ -129,13 +129,20 @@
       ctx.stroke();
 
       const midAngle = startAngle + sliceAngle / 2;
-      const textRadius = radius * 0.65;
-      const textX = cx + Math.cos(midAngle) * textRadius;
-      const textY = cy + Math.sin(midAngle) * textRadius;
+      const normAngle = normalizeAngle(midAngle);
+      const isBottomHalf = normAngle > 0 && normAngle < Math.PI;
 
       ctx.save();
-      ctx.translate(textX, textY);
-      ctx.rotate(midAngle + Math.PI / 2);
+      ctx.translate(cx, cy);
+      ctx.rotate(midAngle);
+
+      // Place the names along the radius of each slice
+      const textDist = radius * 0.55;
+      ctx.translate(textDist, 0);
+
+      if (isBottomHalf) {
+        ctx.rotate(Math.PI);
+      }
 
       const fontSize = Math.max(11, Math.min(16, 220 / names.length));
       ctx.font = `600 ${fontSize}px Outfit, sans-serif`;
