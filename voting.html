@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Roleta NMDP - Voting Gallery</title>
-  <link rel="stylesheet" href="style.css?v=10">
+  <link rel="stylesheet" href="style.css?v=11">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
@@ -117,6 +117,17 @@
         <label class="label" for="edit-desc-input">Descrição do Card</label>
         <textarea id="edit-desc-input" class="input-text" rows="3"></textarea>
       </div>
+      <div class="setting-group" style="margin-top: 1rem;">
+        <label class="label" for="edit-image-input">Imagem do Card</label>
+        <div class="file-upload-row">
+          <label for="edit-image-input" class="btn-secondary">Escolher Imagem</label>
+          <input type="file" id="edit-image-input" accept="image/*" class="hidden-file-input" />
+        </div>
+        <div id="edit-image-preview" class="card-image-preview" style="margin-top:0.5rem;" hidden>
+          <img id="edit-preview-img" src="" alt="Preview" />
+          <button type="button" id="remove-edit-image-btn" class="btn-danger" style="margin-top:0.5rem;">Remover Imagem</button>
+        </div>
+      </div>
       <div class="edit-modal__actions" style="margin-top: 1.5rem; display: flex; gap: 0.75rem; justify-content: flex-end;">
         <button type="button" id="cancel-edit-btn" class="btn-secondary">Cancelar</button>
         <button type="button" id="save-edit-btn" class="btn-primary">Salvar</button>
@@ -125,7 +136,7 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js?v=10"></script>
-  <script src="voting.js?v=10"></script>
+  <script src="config.js?v=11"></script>
+  <script src="voting.js?v=11"></script>
 </body>
 </html>

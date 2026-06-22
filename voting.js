@@ -29,6 +29,10 @@
   const editOverlay = document.getElementById("edit-overlay");
   const editTitleInput = document.getElementById("edit-title-input");
   const editDescInput = document.getElementById("edit-desc-input");
+  const editImageInput = document.getElementById("edit-image-input");
+  const editImagePreview = document.getElementById("edit-image-preview");
+  const editPreviewImg = document.getElementById("edit-preview-img");
+  const removeEditImageBtn = document.getElementById("remove-edit-image-btn");
   const saveEditBtn = document.getElementById("save-edit-btn");
   const cancelEditBtn = document.getElementById("cancel-edit-btn");
 
@@ -58,6 +62,7 @@
   let currentUsername = null;
   let pendingImageDataUrl = null;
   let editingCardId = null;
+  let editingImageDataUrl = null;
 
   // --- User Profiles state persistence ---
   async function loadUsers() {
@@ -350,6 +355,18 @@
         editingCardId = card.id;
         editTitleInput.value = card.title;
         editDescInput.value = card.description || "";
+
+        // Initialize edit image state
+        editingImageDataUrl = card.imageDataUrl;
+        if (editingImageDataUrl) {
+          editPreviewImg.src = editingImageDataUrl;
+          editImagePreview.hidden = false;
+        } else {
+          editPreviewImg.src = "";
+          editImagePreview.hidden = true;
+        }
+        editImageInput.value = ""; // Reset file input
+
         editOverlay.hidden = false;
       });
 
@@ -542,7 +559,11 @@
         if (file) {
           try {
             const dataUrl = await compressImageToWebp(file);
-            showPreview(dataUrl);
+            if (!editOverlay.hidden) {
+              showEditPreview(dataUrl);
+            } else {
+              showPreview(dataUrl);
+            }
           } catch (err) {
             console.error("Erro ao colar imagem:", err);
           }
@@ -612,6 +633,33 @@
   });
 
   // --- Edit Modal Handlers ---
+  function showEditPreview(dataUrl) {
+    editingImageDataUrl = dataUrl;
+    editPreviewImg.src = dataUrl;
+    editImagePreview.hidden = false;
+  }
+
+  function clearEditPreview() {
+    editingImageDataUrl = null;
+    editPreviewImg.src = "";
+    editImagePreview.hidden = true;
+    editImageInput.value = "";
+  }
+
+  editImageInput.addEventListener("change", async (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      try {
+        const dataUrl = await compressImageToWebp(file);
+        showEditPreview(dataUrl);
+      } catch (err) {
+        console.error("Erro ao processar imagem de edição:", err);
+      }
+    }
+  });
+
+  removeEditImageBtn.addEventListener("click", clearEditPreview);
+
   saveEditBtn.addEventListener("click", async () => {
     const title = editTitleInput.value.trim();
     if (!title) {
@@ -622,10 +670,12 @@
     if (card) {
       card.title = title;
       card.description = editDescInput.value.trim() || null;
+      card.imageDataUrl = editingImageDataUrl;
       try {
         await supabase.from("cards").update({
           title: card.title,
-          description: card.description
+          description: card.description,
+          image_data_url: card.imageDataUrl
         }).eq("id", card.id);
         renderCards();
       } catch (err) {
@@ -634,11 +684,13 @@
     }
     editOverlay.hidden = true;
     editingCardId = null;
+    editingImageDataUrl = null;
   });
 
   cancelEditBtn.addEventListener("click", () => {
     editOverlay.hidden = true;
     editingCardId = null;
+    editingImageDataUrl = null;
   });
 
   editOverlay.addEventListener("click", (e) => {
