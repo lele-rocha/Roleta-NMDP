@@ -477,11 +477,44 @@
     cardImageInput.value = "";
   }
 
-  function readFileAsDataUrl(file) {
-    return new Promise((resolve) => {
+  function compressImageToWebp(file, maxWidth = 600, maxHeight = 600, quality = 0.7) {
+    return new Promise((resolve, reject) => {
       const reader = new FileReader();
-      reader.onload = (e) => resolve(e.target.result);
       reader.readAsDataURL(file);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target.result;
+        img.onload = () => {
+          const canvas = document.createElement("canvas");
+          let width = img.width;
+          let height = img.height;
+
+          // Resize if exceeding max dimensions
+          if (width > height) {
+            if (width > maxWidth) {
+              height = Math.round((height * maxWidth) / width);
+              width = maxWidth;
+            }
+          } else {
+            if (height > maxHeight) {
+              width = Math.round((width * maxHeight) / height);
+              height = maxHeight;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+
+          const ctx = canvas.getContext("2d");
+          ctx.drawImage(img, 0, 0, width, height);
+
+          // Convert to WebP format with quality compression
+          const compressedDataUrl = canvas.toDataURL("image/webp", quality);
+          resolve(compressedDataUrl);
+        };
+        img.onerror = (err) => reject(err);
+      };
+      reader.onerror = (err) => reject(err);
     });
   }
 
@@ -489,8 +522,12 @@
   cardImageInput.addEventListener("change", async (e) => {
     const file = e.target.files[0];
     if (file) {
-      const dataUrl = await readFileAsDataUrl(file);
-      showPreview(dataUrl);
+      try {
+        const dataUrl = await compressImageToWebp(file);
+        showPreview(dataUrl);
+      } catch (err) {
+        console.error("Erro ao processar imagem:", err);
+      }
     }
   });
 
@@ -503,8 +540,12 @@
         e.preventDefault();
         const file = item.getAsFile();
         if (file) {
-          const dataUrl = await readFileAsDataUrl(file);
-          showPreview(dataUrl);
+          try {
+            const dataUrl = await compressImageToWebp(file);
+            showPreview(dataUrl);
+          } catch (err) {
+            console.error("Erro ao colar imagem:", err);
+          }
         }
         return;
       }
