@@ -20,6 +20,7 @@
   const cardImagePreview = document.getElementById("card-image-preview");
   const cardPreviewImg = document.getElementById("card-preview-img");
   const removeCardPreview = document.getElementById("remove-card-preview");
+  const addDropZone = document.getElementById("add-card-drop-zone");
 
   // Dropdown toggle controls
   const toggleControlsBtn = document.getElementById("toggle-controls-btn");
@@ -33,6 +34,7 @@
   const editImagePreview = document.getElementById("edit-image-preview");
   const editPreviewImg = document.getElementById("edit-preview-img");
   const removeEditImageBtn = document.getElementById("remove-edit-image-btn");
+  const editDropZone = document.getElementById("edit-card-drop-zone");
   const saveEditBtn = document.getElementById("save-edit-btn");
   const cancelEditBtn = document.getElementById("cancel-edit-btn");
 
@@ -612,6 +614,48 @@
     cardImageInput.value = "";
   }
 
+  function setupDragAndDrop(dropZone, fileInput, onImageProcessed) {
+    if (!dropZone || !fileInput) return;
+
+    // Clicking triggers file input
+    dropZone.addEventListener("click", (e) => {
+      if (e.target !== fileInput) {
+        fileInput.click();
+      }
+    });
+
+    // Drag events
+    ["dragenter", "dragover"].forEach((eventName) => {
+      dropZone.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dropZone.classList.add("dragover");
+      }, false);
+    });
+
+    ["dragleave", "drop"].forEach((eventName) => {
+      dropZone.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dropZone.classList.remove("dragover");
+      }, false);
+    });
+
+    // Handle dropped files
+    dropZone.addEventListener("drop", async (e) => {
+      const dt = e.dataTransfer;
+      const file = dt.files[0];
+      if (file && file.type.startsWith("image/")) {
+        try {
+          const dataUrl = await compressImageToWebp(file);
+          onImageProcessed(dataUrl);
+        } catch (err) {
+          console.error("Erro ao processar imagem arrastada:", err);
+        }
+      }
+    });
+  }
+
   function compressImageToWebp(file, maxWidth = 600, maxHeight = 600, quality = 0.7) {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -1072,6 +1116,8 @@
     }
     updateUserBar();
     initImageObserver();
+    setupDragAndDrop(addDropZone, cardImageInput, showPreview);
+    setupDragAndDrop(editDropZone, editImageInput, showEditPreview);
     renderCards();
     setupRealtime();
   }

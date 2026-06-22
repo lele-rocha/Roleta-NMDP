@@ -71,10 +71,11 @@
             </div>
 
             <div class="setting-group">
-              <label class="label" for="card-image-input">Imagem do Card</label>
-              <p class="setting-desc">Escolha um arquivo ou cole com Ctrl+V</p>
-              <div class="file-upload-row">
-                <label for="card-image-input" class="btn-secondary">Escolher Imagem</label>
+              <label class="label">Imagem do Card</label>
+              <div id="add-card-drop-zone" class="drop-zone">
+                <span class="drop-zone__icon">📁</span>
+                <span class="btn-secondary" style="font-size: 0.85rem; padding: 0.45rem 1rem;">Escolher Imagem</span>
+                <span class="drop-zone__prompt">ou arraste e solte o arquivo aqui, ou cole (Ctrl+V)</span>
                 <input type="file" id="card-image-input" accept="image/*" class="hidden-file-input" />
               </div>
               <div id="card-image-preview" class="card-image-preview" hidden>
@@ -118,9 +119,11 @@
         <textarea id="edit-desc-input" class="input-text" rows="3"></textarea>
       </div>
       <div class="setting-group" style="margin-top: 1rem;">
-        <label class="label" for="edit-image-input">Imagem do Card</label>
-        <div class="file-upload-row">
-          <label for="edit-image-input" class="btn-secondary">Escolher Imagem</label>
+        <label class="label">Imagem do Card</label>
+        <div id="edit-card-drop-zone" class="drop-zone">
+          <span class="drop-zone__icon">📁</span>
+          <span class="btn-secondary" style="font-size: 0.85rem; padding: 0.45rem 1rem;">Escolher Imagem</span>
+          <span class="drop-zone__prompt">ou arraste e solte o arquivo aqui, ou cole (Ctrl+V)</span>
           <input type="file" id="edit-image-input" accept="image/*" class="hidden-file-input" />
         </div>
         <div id="edit-image-preview" class="card-image-preview" style="margin-top:0.5rem;" hidden>
