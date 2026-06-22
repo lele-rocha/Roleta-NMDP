@@ -191,14 +191,14 @@
       const el = document.createElement("div");
       el.className = "vote-card";
       if (currentUsername) {
-        const user = getOrCreateUser(currentUsername);
-        if (user.votedCardIds.includes(card.id)) {
+        const user = users.find(u => u.name.toLowerCase() === currentUsername.toLowerCase());
+        if (user && user.votedCardIds && user.votedCardIds.includes(card.id)) {
           el.classList.add("voted");
         }
       }
       // Find all users who voted for this card
       const voters = users
-        .filter((u) => u.votedCardIds.includes(card.id))
+        .filter((u) => u.votedCardIds && u.votedCardIds.includes(card.id))
         .map((u) => u.name);
 
       const votersHtml = voters.length > 0
