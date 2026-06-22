@@ -1207,6 +1207,94 @@ select {
 }
 
 /* ============================
+   Wheel Mode Selector & Cards List
+   ============================ */
+
+.wheel-mode-selector {
+  display: flex;
+  justify-content: center;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+  width: 100%;
+}
+
+.btn-mode-select {
+  flex: 1;
+  max-width: 220px;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-raised);
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 0.875rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  box-shadow: var(--shadow);
+}
+
+.btn-mode-select:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.btn-mode-select.active {
+  background: linear-gradient(135deg, var(--accent), #a29bfe);
+  border-color: transparent;
+  color: #fff;
+  box-shadow: 0 4px 16px var(--accent-glow);
+}
+
+.imported-cards-list {
+  max-height: 280px;
+  overflow-y: auto;
+  padding-right: 0.25rem;
+  margin-top: 0.5rem;
+}
+
+.imported-card-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.65rem 0.85rem;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-bottom: 0.5rem;
+  font-size: 0.85rem;
+  transition: opacity 0.2s, border-color 0.2s;
+}
+
+.imported-card-item.eliminated {
+  opacity: 0.4;
+  border-color: rgba(255, 118, 117, 0.2);
+}
+
+.imported-card-title {
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-right: 0.5rem;
+}
+
+.imported-card-lives {
+  font-weight: 700;
+  color: var(--accent-hover);
+  flex-shrink: 0;
+}
+
+.imported-card-item.eliminated .imported-card-lives {
+  color: #ff7675;
+}
+
+/* ============================
    Responsive - Voting Page
    ============================ */
 

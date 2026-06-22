@@ -22,6 +22,13 @@
   const removeBgImageBtn = document.getElementById("remove-bg-image-btn");
   const wheelCenterEl = document.querySelector(".wheel-center");
 
+  const toggleDefaultWheelBtn = document.getElementById("toggle-default-wheel");
+  const toggleCardsWheelBtn = document.getElementById("toggle-cards-wheel");
+  const defaultNamesControls = document.getElementById("default-names-controls");
+  const cardsNamesControls = document.getElementById("cards-names-controls");
+  const importCardsBtn = document.getElementById("import-cards-btn");
+  const importedCardsList = document.getElementById("imported-cards-list");
+
   // Audio library state
   let audioLibrary = [];
   let currentAudio = null;
@@ -109,6 +116,29 @@
   const MAX_SPINS = 10;
 
   let names = [];
+  let activeWheelMode = "default"; // "default" or "cards"
+  let cardsWheelItems = []; // { id, title, lives }
+
+  function saveCardsWheelState() {
+    localStorage.setItem("roleta-nmdp-cards-wheel", JSON.stringify(cardsWheelItems));
+  }
+
+  function loadCardsWheelState() {
+    try {
+      const raw = localStorage.getItem("roleta-nmdp-cards-wheel");
+      if (raw) {
+        cardsWheelItems = JSON.parse(raw);
+      }
+    } catch (e) {
+      cardsWheelItems = [];
+    }
+  }
+
+  function escapeHtml(str) {
+    const div = document.createElement("div");
+    div.textContent = str;
+    return div.innerHTML;
+  }
   let rotation = 0;
   let isSpinning = false;
   let animationId = null;
@@ -182,7 +212,14 @@
 
     ctx.clearRect(0, 0, size, size);
 
-    if (names.length === 0) {
+    let currentItems = [];
+    if (activeWheelMode === "default") {
+      currentItems = names;
+    } else {
+      currentItems = cardsWheelItems.filter(item => item.lives > 0).map(item => `${item.title} (${item.lives})`);
+    }
+
+    if (currentItems.length === 0) {
       ctx.beginPath();
       ctx.arc(cx, cy, radius, 0, Math.PI * 2);
       ctx.fillStyle = "#242836";
@@ -195,16 +232,16 @@
       ctx.font = "600 18px Outfit, sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText("Adicione nomes", cx, cy);
+      ctx.fillText(activeWheelMode === "default" ? "Adicione nomes" : "Importe os cards", cx, cy);
       return;
     }
 
-    const sliceAngle = (Math.PI * 2) / names.length;
+    const sliceAngle = (Math.PI * 2) / currentItems.length;
 
-    names.forEach((name, i) => {
+    currentItems.forEach((name, i) => {
       const startAngle = rotation + i * sliceAngle;
       const endAngle = startAngle + sliceAngle;
-      const color = getSliceColor(i, names.length);
+      const color = getSliceColor(i, currentItems.length);
 
       ctx.beginPath();
       ctx.moveTo(cx, cy);
@@ -232,7 +269,7 @@
         ctx.rotate(Math.PI);
       }
 
-      const fontSize = Math.max(11, Math.min(16, 220 / names.length));
+      const fontSize = Math.max(11, Math.min(16, 220 / currentItems.length));
       ctx.font = `600 ${fontSize}px Outfit, sans-serif`;
       ctx.fillStyle = getContrastColor(color);
       ctx.textAlign = "center";
@@ -294,42 +331,110 @@
   }
 
   function getWinnerIndex() {
-    if (names.length === 0) return -1;
-    const sliceAngle = (Math.PI * 2) / names.length;
+    let totalItems = 0;
+    if (activeWheelMode === "default") {
+      totalItems = names.length;
+    } else {
+      totalItems = cardsWheelItems.filter(item => item.lives > 0).length;
+    }
+    if (totalItems === 0) return -1;
+    const sliceAngle = (Math.PI * 2) / totalItems;
     const pointerInWheel = normalizeAngle(POINTER_ANGLE - rotation);
-    const index = Math.floor(pointerInWheel / sliceAngle) % names.length;
+    const index = Math.floor(pointerInWheel / sliceAngle) % totalItems;
     return index;
   }
 
-  function updateUI() {
-    names = parseNames(namesInput.value);
-    const count = names.length;
+  function renderImportedCardsList() {
+    if (!importedCardsList) return;
 
-    nameCountEl.textContent = count === 1 ? "1 nome" : `${count} nomes`;
-
-    const canSpin = count >= 2 && !isSpinning;
-    spinBtn.disabled = !canSpin;
-    namesInput.disabled = isSpinning;
-    spinDurationSlider.disabled = isSpinning;
-
-    if (isSpinning) {
-      wheelHint.textContent = "Girando…";
-    } else if (count < 2) {
-      wheelHint.textContent =
-        count === 1
-          ? "Adicione mais um nome para girar"
-          : "Adicione pelo menos 2 nomes para girar";
-    } else {
-      wheelHint.textContent = "Clique em Girar para sortear!";
+    if (cardsWheelItems.length === 0) {
+      importedCardsList.innerHTML = `
+        <p class="setting-desc" style="text-align: center; padding: 1.5rem 0;">
+          Nenhum card importado ainda. Clique no botão acima para carregar.
+        </p>
+      `;
+      return;
     }
 
+    importedCardsList.innerHTML = "";
+    cardsWheelItems.forEach((item) => {
+      const el = document.createElement("div");
+      el.className = "imported-card-item";
+      if (item.lives === 0) {
+        el.classList.add("eliminated");
+      }
+      el.innerHTML = `
+        <span class="imported-card-title">${escapeHtml(item.title)}</span>
+        <span class="imported-card-lives">${item.lives > 0 ? `❤️ ${item.lives}` : "💀 Eliminado"}</span>
+      `;
+      importedCardsList.appendChild(el);
+    });
+  }
+
+  function updateUI() {
+    let count = 0;
+    let canSpin = false;
+
+    if (activeWheelMode === "default") {
+      names = parseNames(namesInput.value);
+      count = names.length;
+      nameCountEl.textContent = count === 1 ? "1 nome" : `${count} nomes`;
+      canSpin = count >= 2 && !isSpinning;
+
+      namesInput.disabled = isSpinning;
+      spinDurationSlider.disabled = isSpinning;
+
+      if (isSpinning) {
+        wheelHint.textContent = "Girando…";
+      } else if (count < 2) {
+        wheelHint.textContent =
+          count === 1
+            ? "Adicione mais um nome para girar"
+            : "Adicione pelo menos 2 nomes para girar";
+      } else {
+        wheelHint.textContent = "Clique em Girar para sortear!";
+      }
+    } else {
+      const activeItems = cardsWheelItems.filter(item => item.lives > 0);
+      count = activeItems.length;
+      nameCountEl.textContent = count === 1 ? "1 card" : `${count} cards`;
+      canSpin = count >= 2 && !isSpinning;
+
+      spinDurationSlider.disabled = isSpinning;
+
+      if (isSpinning) {
+        wheelHint.textContent = "Girando…";
+      } else if (count < 2) {
+        wheelHint.textContent =
+          count === 1
+            ? "Importe mais cards com votos para girar"
+            : "Importe pelo menos 2 cards com votos para girar";
+      } else {
+        wheelHint.textContent = "Clique em Girar para sortear!";
+      }
+
+      renderImportedCardsList();
+    }
+
+    spinBtn.disabled = !canSpin;
     drawWheel();
   }
 
   function showWinner(name) {
     winnerNameEl.textContent = name;
-    if (names.length > 2) {
-      winnerLabelEl.textContent = "Nome Sorteado";
+    
+    let totalItems = 0;
+    if (activeWheelMode === "default") {
+      totalItems = names.length;
+    } else {
+      totalItems = cardsWheelItems.filter(item => item.lives > 0).length;
+    }
+
+    const canConfirm = (activeWheelMode === "default" && totalItems > 2) || 
+                       (activeWheelMode === "cards" && totalItems >= 2);
+
+    if (canConfirm) {
+      winnerLabelEl.textContent = activeWheelMode === "default" ? "Nome Sorteado" : "Card Sorteado";
       confirmWinnerBtn.style.display = "";
       closeWinnerBtn.textContent = "Cancelar";
     } else {
@@ -359,7 +464,14 @@
     winningIndex = getWinnerIndex();
     updateUI();
 
-    const winner = names[winningIndex];
+    let winner = "";
+    if (activeWheelMode === "default") {
+      winner = names[winningIndex];
+    } else {
+      const activeItems = cardsWheelItems.filter(item => item.lives > 0);
+      winner = activeItems[winningIndex] ? activeItems[winningIndex].title : "";
+    }
+
     playWinnerSound();
     if (winner) {
       setTimeout(() => showWinner(winner), 400);
@@ -384,7 +496,14 @@
   }
 
   function spin() {
-    if (isSpinning || names.length < 2) return;
+    let totalItems = 0;
+    if (activeWheelMode === "default") {
+      totalItems = names.length;
+    } else {
+      totalItems = cardsWheelItems.filter(item => item.lives > 0).length;
+    }
+
+    if (isSpinning || totalItems < 2) return;
 
     hideWinner();
     isSpinning = true;
@@ -417,11 +536,74 @@
   spinBtn.addEventListener("click", spin);
   confirmWinnerBtn.addEventListener("click", () => {
     if (winningIndex !== -1) {
-      removeName(winningIndex);
+      if (activeWheelMode === "default") {
+        removeName(winningIndex);
+      } else {
+        const activeItems = cardsWheelItems.filter(item => item.lives > 0);
+        const item = activeItems[winningIndex];
+        if (item) {
+          item.lives--;
+          saveCardsWheelState();
+          winningIndex = -1;
+          updateUI();
+        }
+      }
     }
     hideWinner();
   });
   closeWinnerBtn.addEventListener("click", hideWinner);
+
+  // Mode toggle event listeners
+  toggleDefaultWheelBtn.addEventListener("click", () => setWheelMode("default"));
+  toggleCardsWheelBtn.addEventListener("click", () => setWheelMode("cards"));
+
+  function setWheelMode(mode) {
+    activeWheelMode = mode;
+    winningIndex = -1;
+    
+    if (mode === "default") {
+      toggleDefaultWheelBtn.classList.add("active");
+      toggleCardsWheelBtn.classList.remove("active");
+      defaultNamesControls.style.display = "block";
+      cardsNamesControls.style.display = "none";
+    } else {
+      toggleDefaultWheelBtn.classList.remove("active");
+      toggleCardsWheelBtn.classList.add("active");
+      defaultNamesControls.style.display = "none";
+      cardsNamesControls.style.display = "block";
+    }
+
+    updateUI();
+  }
+
+  // Import button event listener
+  importCardsBtn.addEventListener("click", importCardsFromStorage);
+
+  function importCardsFromStorage() {
+    try {
+      const raw = localStorage.getItem("roleta-nmdp-cards");
+      if (raw) {
+        const cards = JSON.parse(raw);
+        const votedCards = cards.filter(c => c.votes >= 1);
+        if (votedCards.length === 0) {
+          alert("Nenhum card com 1 ou mais votos encontrado para importar!");
+          return;
+        }
+        cardsWheelItems = votedCards.map(c => ({
+          id: c.id,
+          title: c.title,
+          lives: c.votes
+        }));
+        saveCardsWheelState();
+        updateUI();
+      } else {
+        alert("Nenhum card cadastrado com votos encontrado!");
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Erro ao importar cards!");
+    }
+  }
   winnerOverlay.addEventListener("click", (e) => {
     if (e.target === winnerOverlay) hideWinner();
   });
@@ -485,6 +667,7 @@
     removeBgImageBtn.style.display = "none";
   });
 
+  loadCardsWheelState();
   updateDurationLabel();
   updateUI();
 })();

@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Roleta NMDP - Wheel</title>
-  <link rel="stylesheet" href="style.css?v=3">
+  <link rel="stylesheet" href="style.css?v=4">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
@@ -28,8 +28,25 @@
         </nav>
         <div class="tab-panels">
           <div class="tab-panel active" id="tab-names" role="tabpanel" aria-labelledby="tab-btn-names">
-            <label for="names-input" class="label">Nomes (um por linha)</label>
-            <textarea id="names-input" class="names-input" rows="12" placeholder="Maria&#10;João&#10;Ana&#10;Pedro&#10;..."></textarea>
+            <!-- Default Wheel controls -->
+            <div id="default-names-controls">
+              <label for="names-input" class="label">Nomes (um por linha)</label>
+              <textarea id="names-input" class="names-input" rows="12" placeholder="Maria&#10;João&#10;Ana&#10;Pedro&#10;..."></textarea>
+            </div>
+
+            <!-- Cards Wheel controls -->
+            <div id="cards-names-controls" style="display: none;">
+              <button type="button" id="import-cards-btn" class="btn-primary" style="width: 100%; margin-bottom: 1.25rem;">
+                📥 Importar Cards Votados
+              </button>
+              <label class="label">Cards Importados (Vidas)</label>
+              <div id="imported-cards-list" class="imported-cards-list">
+                <p class="setting-desc" style="text-align: center; padding: 1.5rem 0;">
+                  Nenhum card importado ainda. Clique no botão acima para carregar.
+                </p>
+              </div>
+            </div>
+
             <p class="name-count" id="name-count">0 nomes</p>
           </div>
           <div class="tab-panel" id="tab-settings" role="tabpanel" aria-labelledby="tab-btn-settings" hidden>
@@ -92,6 +109,10 @@
         </div>
       </aside>
       <section class="panel panel-wheel">
+        <div class="wheel-mode-selector">
+          <button type="button" id="toggle-default-wheel" class="btn-mode-select active">🎡 Modo Normal</button>
+          <button type="button" id="toggle-cards-wheel" class="btn-mode-select">🗳️ Modo Cards (Votos)</button>
+        </div>
         <div class="wheel-wrapper">
           <div class="pointer" aria-hidden="true"></div>
           <canvas id="wheel-canvas" width="480" height="480"></canvas>
@@ -112,6 +133,6 @@
       </div>
     </div>
   </div>
-  <script src="wheel.js"></script>
+  <script src="wheel.js?v=4"></script>
 </body>
 </html>
