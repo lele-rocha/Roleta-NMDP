@@ -35,6 +35,8 @@
   const cardsNamesControls = document.getElementById("cards-names-controls");
   const importCardsBtn = document.getElementById("import-cards-btn");
   const importedCardsList = document.getElementById("imported-cards-list");
+  const clearDefaultNamesBtn = document.getElementById("clear-default-names-btn");
+  const clearCardsBtn = document.getElementById("clear-cards-btn");
 
   // Audio library state
   let audioLibrary = [];
@@ -678,6 +680,27 @@
   // Mode toggle event listeners
   toggleDefaultWheelBtn.addEventListener("click", () => setWheelMode("default"));
   toggleCardsWheelBtn.addEventListener("click", () => setWheelMode("cards"));
+
+  // Clear buttons event listeners
+  if (clearDefaultNamesBtn) {
+    clearDefaultNamesBtn.addEventListener("click", () => {
+      namesInput.value = "";
+      namesInput.dispatchEvent(new Event("input"));
+      winningIndex = -1;
+      updateUI();
+    });
+  }
+
+  if (clearCardsBtn) {
+    clearCardsBtn.addEventListener("click", () => {
+      if (confirm("Tem certeza que deseja limpar todos os cards importados?")) {
+        cardsWheelItems = [];
+        saveCardsWheelState();
+        winningIndex = -1;
+        updateUI();
+      }
+    });
+  }
 
   function setWheelMode(mode) {
     activeWheelMode = mode;
