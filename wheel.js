@@ -119,6 +119,109 @@
   let activeWheelMode = "default"; // "default" or "cards"
   let cardsWheelItems = []; // { id, title, lives }
 
+  // Confetti Animation Logic
+  let confettiActive = false;
+  let confettiCanvas = null;
+  let confettiCtx = null;
+  let confettiParticles = [];
+  const CONFETTI_COLORS = ["#6c5ce7", "#7f70f0", "#fdcb6e", "#ff7675", "#55efc4", "#81ecec", "#a29bfe"];
+
+  function startConfetti() {
+    if (confettiActive) return;
+    confettiCanvas = document.getElementById("confetti-canvas");
+    if (!confettiCanvas) {
+      confettiCanvas = document.createElement("canvas");
+      confettiCanvas.id = "confetti-canvas";
+      confettiCanvas.style.position = "fixed";
+      confettiCanvas.style.inset = "0";
+      confettiCanvas.style.width = "100vw";
+      confettiCanvas.style.height = "100vh";
+      confettiCanvas.style.pointerEvents = "none";
+      confettiCanvas.style.zIndex = "999";
+      document.body.appendChild(confettiCanvas);
+    }
+    confettiCtx = confettiCanvas.getContext("2d");
+    resizeConfettiCanvas();
+    window.addEventListener("resize", resizeConfettiCanvas);
+
+    confettiActive = true;
+    confettiParticles = [];
+    for (let i = 0; i < 150; i++) {
+      confettiParticles.push(createConfettiParticle());
+    }
+    requestAnimationFrame(updateConfetti);
+  }
+
+  function stopConfetti() {
+    confettiActive = false;
+    window.removeEventListener("resize", resizeConfettiCanvas);
+    if (confettiCanvas && confettiCanvas.parentNode) {
+      confettiCanvas.parentNode.removeChild(confettiCanvas);
+      confettiCanvas = null;
+      confettiCtx = null;
+    }
+  }
+
+  function resizeConfettiCanvas() {
+    if (confettiCanvas) {
+      confettiCanvas.width = window.innerWidth;
+      confettiCanvas.height = window.innerHeight;
+    }
+  }
+
+  function createConfettiParticle() {
+    return {
+      x: Math.random() * window.innerWidth,
+      y: Math.random() * -window.innerHeight - 20,
+      size: Math.random() * 8 + 6,
+      color: CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)],
+      speedX: Math.random() * 4 - 2,
+      speedY: Math.random() * 5 + 4,
+      rotation: Math.random() * 360,
+      rotationSpeed: Math.random() * 4 - 2,
+    };
+  }
+
+  function updateConfetti() {
+    if (!confettiActive) return;
+    confettiCtx.clearRect(0, 0, confettiCanvas.width, confettiCanvas.height);
+
+    let activeParticles = 0;
+    confettiParticles.forEach((p) => {
+      p.y += p.speedY;
+      p.x += p.speedX;
+      p.rotation += p.rotationSpeed;
+
+      confettiCtx.save();
+      confettiCtx.translate(p.x, p.y);
+      confettiCtx.rotate((p.rotation * Math.PI) / 180);
+      confettiCtx.fillStyle = p.color;
+      confettiCtx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size);
+      confettiCtx.restore();
+
+      if (p.y < window.innerHeight) {
+        activeParticles++;
+      } else {
+        p.y = -20;
+        p.x = Math.random() * window.innerWidth;
+        p.speedY = Math.random() * 5 + 4;
+      }
+    });
+
+    if (activeParticles > 0) {
+      requestAnimationFrame(updateConfetti);
+    }
+  }
+
+  function showUltimateWinner(name) {
+    winnerNameEl.textContent = name;
+    winnerLabelEl.textContent = "🏆 Vencedor Absoluto 🏆";
+    confirmWinnerBtn.style.display = "none";
+    closeWinnerBtn.textContent = "Celebrar!";
+    winnerOverlay.hidden = false;
+    startConfetti();
+  }
+
   function saveCardsWheelState() {
     localStorage.setItem("roleta-nmdp-cards-wheel", JSON.stringify(cardsWheelItems));
   }
@@ -447,6 +550,7 @@
 
   function hideWinner() {
     winnerOverlay.hidden = true;
+    stopConfetti();
   }
 
   function removeName(index) {
@@ -538,6 +642,7 @@
     if (winningIndex !== -1) {
       if (activeWheelMode === "default") {
         removeName(winningIndex);
+        hideWinner();
       } else {
         const activeItems = cardsWheelItems.filter(item => item.lives > 0);
         const item = activeItems[winningIndex];
@@ -546,10 +651,20 @@
           saveCardsWheelState();
           winningIndex = -1;
           updateUI();
+
+          const remainingActive = cardsWheelItems.filter(item => item.lives > 0);
+          if (remainingActive.length === 1) {
+            setTimeout(() => {
+              showUltimateWinner(remainingActive[0].title);
+            }, 500);
+            return;
+          }
         }
+        hideWinner();
       }
+    } else {
+      hideWinner();
     }
-    hideWinner();
   });
   closeWinnerBtn.addEventListener("click", hideWinner);
 
@@ -596,6 +711,12 @@
         }));
         saveCardsWheelState();
         updateUI();
+
+        if (cardsWheelItems.length === 1) {
+          setTimeout(() => {
+            showUltimateWinner(cardsWheelItems[0].title);
+          }, 400);
+        }
       } else {
         alert("Nenhum card cadastrado com votos encontrado!");
       }

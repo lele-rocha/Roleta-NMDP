@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Roleta NMDP - Voting Gallery</title>
-  <link rel="stylesheet" href="style.css?v=4">
+  <link rel="stylesheet" href="style.css?v=8">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
@@ -19,7 +19,39 @@
       </div>
     </nav>
 
+    <!-- User Login & Session Bar -->
+    <div class="user-session-bar">
+      <div id="user-login-form" class="user-session-form">
+        <label for="username-input" class="label-inline">Identifique-se para votar:</label>
+        <input type="text" id="username-input" class="input-text-sm" placeholder="Digite seu nome" />
+        <button type="button" id="login-btn" class="btn-primary-sm">Entrar</button>
+      </div>
+      <div id="user-profile-status" class="user-session-profile" style="display: none;">
+        <span>Usuário ativo: <strong id="active-username" class="accent-text"></strong></span>
+        <span class="user-votes-status">Votos castados: <strong id="active-user-votes">0</strong>/20</span>
+        <button type="button" id="logout-btn" class="btn-secondary-sm">Sair</button>
+        <button type="button" id="clear-votes-btn" class="btn-danger-sm" title="Limpar todos os meus votos">Limpar Votos</button>
+      </div>
+      <div class="backup-controls">
+        <button type="button" id="export-data-btn" class="btn-backup" title="Exportar backup dos dados">Exportar Dados</button>
+        <button type="button" id="import-data-btn" class="btn-backup" title="Importar backup dos dados">Importar Dados</button>
+        <input type="file" id="import-file-input" accept=".json" class="hidden-file-input" />
+      </div>
+    </div>
+
     <main class="voting-main">
+      <!-- Collapsible users list container -->
+      <div class="users-list-wrapper">
+        <button type="button" id="toggle-users-list-btn" class="btn-toggle-controls">
+          <span class="btn-toggle-controls__text">👥 Usuários Cadastrados</span>
+          <span class="chevron" id="users-chevron">▼</span>
+        </button>
+        <div id="users-list-dropdown" class="voting-controls-dropdown" hidden>
+          <p id="users-empty-msg" class="cards-empty-msg" style="margin: 0; padding: 0.5rem 0;">Nenhum usuário cadastrado ainda.</p>
+          <div id="users-list-container" class="users-list-container"></div>
+        </div>
+      </div>
+
       <!-- Collapsible voting controls container -->
       <div class="voting-controls-wrapper">
         <button type="button" id="toggle-controls-btn" class="btn-toggle-controls">
@@ -92,6 +124,6 @@
     </div>
   </div>
 
-  <script src="voting.js?v=3"></script>
+  <script src="voting.js?v=8"></script>
 </body>
 </html>
