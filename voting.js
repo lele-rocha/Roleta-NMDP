@@ -70,6 +70,18 @@
       el.className = "vote-card";
       el.dataset.id = card.id;
       el.innerHTML = `
+        <span class="card-votes-badge">${card.votes}</span>
+        <div class="card-menu-container">
+          <button class="btn-card-menu" title="Opções">⋮</button>
+          <div class="card-menu-dropdown" hidden>
+            <button class="btn-card-menu-item btn-edit-card" data-id="${card.id}">✏️ Editar</button>
+            <button class="btn-card-menu-item btn-delete-card" data-id="${card.id}">🗑️ Excluir</button>
+          </div>
+        </div>
+        <button class="btn-remove-vote" data-id="${card.id}" title="Remover Voto">
+          <span class="btn-remove-vote__icon">✕</span>
+          <span class="btn-remove-vote__text">Remover Voto</span>
+        </button>
         <div class="vote-card__img-wrap">
           ${card.imageDataUrl
             ? `<img src="${card.imageDataUrl}" alt="${card.title}" class="vote-card__img" />`
@@ -80,17 +92,16 @@
           <h3 class="vote-card__title">${escapeHtml(card.title)}</h3>
           ${card.description ? `<p class="vote-card__desc">${escapeHtml(card.description)}</p>` : ""}
           <p class="vote-card__date">${formatDate(card.timestamp)}</p>
-          <div class="vote-card__actions">
-            <button class="btn-vote" tabindex="-1">❤️ ${card.votes}</button>
-            <button class="btn-edit-card" data-id="${card.id}">✏️</button>
-            <button class="btn-delete-card" data-id="${card.id}">🗑️</button>
-          </div>
         </div>
       `;
 
-      // Vote on card click (excluding delete/edit buttons)
+      // Vote on card click (excluding menu button, menu dropdown, or remove-vote button)
       el.addEventListener("click", (e) => {
-        if (e.target.closest(".btn-delete-card") || e.target.closest(".btn-edit-card")) {
+        if (
+          e.target.closest(".btn-card-menu") ||
+          e.target.closest(".card-menu-dropdown") ||
+          e.target.closest(".btn-remove-vote")
+        ) {
           return;
         }
         card.votes++;
@@ -98,9 +109,22 @@
         renderCards();
       });
 
+      const menuBtn = el.querySelector(".btn-card-menu");
+      const menuDropdown = el.querySelector(".card-menu-dropdown");
+
+      // Toggle menu dropdown
+      menuBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        document.querySelectorAll(".card-menu-dropdown").forEach((drop) => {
+          if (drop !== menuDropdown) drop.hidden = true;
+        });
+        menuDropdown.hidden = !menuDropdown.hidden;
+      });
+
       // Edit listener
       el.querySelector(".btn-edit-card").addEventListener("click", (e) => {
         e.stopPropagation();
+        menuDropdown.hidden = true;
         editingCardId = card.id;
         editTitleInput.value = card.title;
         editDescInput.value = card.description || "";
@@ -110,9 +134,20 @@
       // Delete listener
       el.querySelector(".btn-delete-card").addEventListener("click", (e) => {
         e.stopPropagation();
+        menuDropdown.hidden = true;
         cards = cards.filter((c) => c.id !== card.id);
         saveCards();
         renderCards();
+      });
+
+      // Remove vote listener
+      el.querySelector(".btn-remove-vote").addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (card.votes > 0) {
+          card.votes--;
+          saveCards();
+          renderCards();
+        }
       });
 
       cardsContainer.appendChild(el);
@@ -262,6 +297,15 @@
     if (e.key === "Escape" && !editOverlay.hidden) {
       editOverlay.hidden = true;
       editingCardId = null;
+    }
+  });
+
+  // Close card menus when clicking outside
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest(".card-menu-container")) {
+      document.querySelectorAll(".card-menu-dropdown").forEach((drop) => {
+        drop.hidden = true;
+      });
     }
   });
 
