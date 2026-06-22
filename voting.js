@@ -1,9 +1,14 @@
 (function () {
   "use strict";
 
-  const STORAGE_KEY = "roleta-nmdp-cards";
-  const USERS_STORAGE_KEY = "roleta-nmdp-users";
   const SESSION_STORAGE_KEY = "roleta-nmdp-session";
+
+  const supabaseUrl = window.SUPABASE_URL;
+  const supabaseKey = window.SUPABASE_KEY;
+  if (!supabaseUrl || !supabaseKey) {
+    console.error("Supabase credentials not found in config.js");
+  }
+  const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
 
   const cardTitleInput = document.getElementById("card-title-input");
   const cardDescInput = document.getElementById("card-desc-input");
