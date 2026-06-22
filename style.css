@@ -1495,6 +1495,65 @@ select {
 }
 
 /* ============================
+   Admin Controls & Badges
+   ============================ */
+
+.voter-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+  margin: 0.1rem;
+}
+
+.btn-remove-voter {
+  background: transparent;
+  border: none;
+  color: #ff7675;
+  cursor: pointer;
+  font-size: 0.75rem;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  line-height: 1;
+  transition: background 0.2s, color 0.2s;
+}
+
+.btn-remove-voter:hover {
+  background: rgba(255, 118, 117, 0.2);
+  color: #ff4757;
+}
+
+.user-status-card {
+  position: relative;
+}
+
+.btn-delete-user {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.85rem;
+  opacity: 0.6;
+  transition: opacity 0.2s, color 0.2s;
+}
+
+.btn-delete-user:hover {
+  opacity: 1;
+  color: #ff7675;
+}
+
+/* ============================
    Responsive - Voting Page
    ============================ */
 

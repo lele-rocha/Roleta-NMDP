@@ -130,6 +130,7 @@
 
     // Sort users alphabetically
     const sortedUsers = [...users].sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+    const isAdmin = currentUsername && currentUsername.toLowerCase() === "lele";
 
     sortedUsers.forEach((user) => {
       const cardCount = user.votedCardIds.length;
@@ -141,12 +142,55 @@
         el.classList.add("active-user-highlight");
       }
 
+      const deleteBtnHtml = (isAdmin && user.name.toLowerCase() !== "lele")
+        ? `<button class="btn-delete-user" data-username="${escapeHtml(user.name)}" title="Excluir usuário e todos os seus votos">🗑️</button>`
+        : '';
+
       el.innerHTML = `
+        ${deleteBtnHtml}
         <span class="user-status-card__name">${escapeHtml(user.name)}</span>
         <span class="user-status-card__votes">Votos: <strong>${cardCount}</strong>/20 (Restam: <strong>${remaining}</strong>)</span>
       `;
       usersListContainer.appendChild(el);
     });
+
+    // Attach click listeners for delete user buttons
+    if (isAdmin) {
+      usersListContainer.querySelectorAll(".btn-delete-user").forEach((btn) => {
+        btn.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          const username = btn.dataset.username;
+          
+          const confirmDelete = confirm(`Tem certeza que deseja excluir o usuário ${username} e todos os seus votos permanentemente?`);
+          if (!confirmDelete) return;
+
+          const user = users.find(u => u.name.toLowerCase() === username.toLowerCase());
+          if (user) {
+            try {
+              // 1. Decrement votes on all cards the user voted for
+              for (const cardId of user.votedCardIds) {
+                const card = cards.find(c => c.id === cardId);
+                if (card && card.votes > 0) {
+                  card.votes--;
+                  await supabase.from("cards").update({ votes: card.votes }).eq("id", card.id);
+                }
+              }
+
+              // 2. Delete user from database
+              await supabase.from("users").delete().eq("name", user.name);
+
+              // Real-time will refresh everything, but we trigger a local update just in case
+              await loadUsers();
+              await loadCards();
+              renderCards();
+              updateUserBar();
+            } catch (err) {
+              console.error("Erro ao excluir usuário pelo admin:", err);
+            }
+          }
+        });
+      });
+    }
   }
 
   // --- Database Persistence ---
@@ -201,9 +245,19 @@
         .filter((u) => u.votedCardIds && u.votedCardIds.includes(card.id))
         .map((u) => u.name);
 
-      const votersHtml = voters.length > 0
-        ? `<div class="vote-card__voters" title="Eleitores: ${voters.join(', ')}">👥 ${voters.map(escapeHtml).join(', ')}</div>`
-        : '';
+      const isAdmin = currentUsername && currentUsername.toLowerCase() === "lele";
+
+      let votersHtml = '';
+      if (voters.length > 0) {
+        if (isAdmin) {
+          const badges = voters.map(name => 
+            `<span class="voter-badge">${escapeHtml(name)} <button class="btn-remove-voter" data-username="${escapeHtml(name)}" data-cardid="${card.id}" title="Remover voto de ${escapeHtml(name)}">✕</button></span>`
+          ).join('');
+          votersHtml = `<div class="vote-card__voters">👥 ${badges}</div>`;
+        } else {
+          votersHtml = `<div class="vote-card__voters" title="Eleitores: ${voters.join(', ')}">👥 ${voters.map(escapeHtml).join(', ')}</div>`;
+        }
+      }
 
       el.dataset.id = card.id;
       el.innerHTML = `
@@ -350,6 +404,42 @@
 
       cardsContainer.appendChild(el);
     });
+
+    // Attach admin remove-voter click listeners
+    const isAdmin = currentUsername && currentUsername.toLowerCase() === "lele";
+    if (isAdmin) {
+      cardsContainer.querySelectorAll(".btn-remove-voter").forEach((btn) => {
+        btn.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          const username = btn.dataset.username;
+          const cardId = btn.dataset.cardid;
+
+          const confirmRemove = confirm(`Remover o voto de ${username} neste card?`);
+          if (!confirmRemove) return;
+
+          const user = users.find(u => u.name.toLowerCase() === username.toLowerCase());
+          const card = cards.find(c => c.id === cardId);
+
+          if (user && card) {
+            const index = user.votedCardIds.indexOf(card.id);
+            if (index !== -1) {
+              user.votedCardIds.splice(index, 1);
+              if (card.votes > 0) {
+                card.votes--;
+              }
+              try {
+                await supabase.from("cards").update({ votes: card.votes }).eq("id", card.id);
+                await supabase.from("users").update({ voted_card_ids: user.votedCardIds }).eq("name", user.name);
+                renderCards();
+                updateUserBar();
+              } catch (err) {
+                console.error("Erro ao remover voto pelo admin:", err);
+              }
+            }
+          }
+        });
+      });
+    }
   }
 
   function escapeHtml(str) {
