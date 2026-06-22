@@ -705,7 +705,7 @@
     try {
       const { data, error } = await supabase
         .from("cards")
-        .select("*")
+        .select("id, title, votes")
         .gte("votes", 1);
       if (error) throw error;
 

@@ -64,6 +64,11 @@
   let editingCardId = null;
   let editingImageDataUrl = null;
 
+  // Image cache and fetching state
+  const imageCache = {}; // cardId -> base64 or 'none'
+  const imageFetchPromises = {}; // cardId -> Promise
+  let imageObserver = null;
+
   // --- User Profiles state persistence ---
   async function loadUsers() {
     try {
@@ -201,19 +206,110 @@
   // --- Database Persistence ---
   async function loadCards() {
     try {
-      const { data, error } = await supabase.from("cards").select("*");
+      const { data, error } = await supabase.from("cards").select("id, title, description, timestamp, votes");
       if (error) throw error;
       cards = (data || []).map(c => ({
         id: c.id,
         title: c.title,
         description: c.description,
-        imageDataUrl: c.image_data_url,
+        imageDataUrl: imageCache[c.id] || null, // Keep cached image if available
         timestamp: Number(c.timestamp),
         votes: c.votes
       }));
     } catch (e) {
       console.error("Erro ao carregar cards:", e);
       cards = [];
+    }
+  }
+
+  // --- Lazy Loading & Image Caching ---
+  function initImageObserver() {
+    if (!("IntersectionObserver" in window)) return;
+
+    imageObserver = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          const placeholder = entry.target;
+          const cardId = placeholder.dataset.id;
+          imageObserver.unobserve(placeholder);
+          triggerImageFetch(cardId);
+        }
+      });
+    }, {
+      rootMargin: "200px 0px", // Trigger loading when card is within 200px of viewport
+      threshold: 0.01
+    });
+  }
+
+  async function triggerImageFetch(cardId) {
+    // If already loaded or fetched
+    if (imageCache[cardId]) {
+      updatePlaceholderWithImage(cardId);
+      return;
+    }
+
+    if (imageFetchPromises[cardId]) {
+      try {
+        await imageFetchPromises[cardId];
+        updatePlaceholderWithImage(cardId);
+      } catch (err) {
+        console.error("Erro ao aguardar carregamento da imagem:", err);
+      }
+      return;
+    }
+
+    // Start a new promise to fetch from Supabase
+    imageFetchPromises[cardId] = (async () => {
+      try {
+        const { data, error } = await supabase
+          .from("cards")
+          .select("image_data_url")
+          .eq("id", cardId)
+          .single();
+
+        if (error) throw error;
+
+        if (data && data.image_data_url) {
+          imageCache[cardId] = data.image_data_url;
+          const card = cards.find(c => c.id === cardId);
+          if (card) {
+            card.imageDataUrl = data.image_data_url;
+          }
+        } else {
+          imageCache[cardId] = "none";
+          const card = cards.find(c => c.id === cardId);
+          if (card) {
+            card.imageDataUrl = null;
+          }
+        }
+      } catch (err) {
+        console.error(`Erro ao buscar imagem para card ${cardId}:`, err);
+        imageCache[cardId] = "none";
+      } finally {
+        delete imageFetchPromises[cardId];
+      }
+    })();
+
+    try {
+      await imageFetchPromises[cardId];
+      updatePlaceholderWithImage(cardId);
+    } catch (err) {
+      // Handled in promise
+    }
+  }
+
+  function updatePlaceholderWithImage(cardId) {
+    const cardEl = cardsContainer.querySelector(`.vote-card[data-id="${cardId}"]`);
+    if (!cardEl) return;
+
+    const imgWrap = cardEl.querySelector(".vote-card__img-wrap");
+    if (!imgWrap) return;
+
+    const cachedUrl = imageCache[cardId];
+    if (cachedUrl && cachedUrl !== "none") {
+      imgWrap.innerHTML = `<img src="${cachedUrl}" alt="" class="vote-card__img" />`;
+    } else {
+      imgWrap.innerHTML = `<div class="vote-card__no-img">Sem imagem</div>`;
     }
   }
 
@@ -279,10 +375,17 @@
           <span class="btn-remove-vote__text">Remover Voto</span>
         </button>
         <div class="vote-card__img-wrap">
-          ${card.imageDataUrl
-            ? `<img src="${card.imageDataUrl}" alt="${card.title}" class="vote-card__img" />`
-            : `<div class="vote-card__no-img">Sem imagem</div>`
-          }
+          ${(function() {
+            const cached = imageCache[card.id];
+            if (cached) {
+              if (cached === "none") {
+                return `<div class="vote-card__no-img">Sem imagem</div>`;
+              }
+              return `<img src="${cached}" alt="${escapeHtml(card.title)}" class="vote-card__img" />`;
+            }
+            // If not cached, render placeholder
+            return `<div class="vote-card__no-img img-loading-placeholder" data-id="${card.id}">Carregando imagem...</div>`;
+          })()}
         </div>
         <div class="vote-card__body">
           <h3 class="vote-card__title">${escapeHtml(card.title)}</h3>
@@ -379,6 +482,8 @@
         try {
           await supabase.from("cards").delete().eq("id", card.id);
           cards = cards.filter((c) => c.id !== card.id);
+          delete imageCache[card.id];
+          delete imageFetchPromises[card.id];
           renderCards();
         } catch (err) {
           console.error("Erro ao excluir card:", err);
@@ -455,6 +560,19 @@
             }
           }
         });
+      });
+    }
+
+    // Register placeholders with intersection observer
+    if (imageObserver) {
+      cardsContainer.querySelectorAll(".img-loading-placeholder").forEach((placeholder) => {
+        imageObserver.observe(placeholder);
+      });
+    } else {
+      // Fallback if IntersectionObserver is not supported
+      cardsContainer.querySelectorAll(".img-loading-placeholder").forEach((placeholder) => {
+        const cardId = placeholder.dataset.id;
+        triggerImageFetch(cardId);
       });
     }
   }
@@ -607,6 +725,11 @@
       }]);
       
       // Update local state and render (Real-time will also trigger, but this ensures immediate feedback)
+      if (newCard.imageDataUrl) {
+        imageCache[newCard.id] = newCard.imageDataUrl;
+      } else {
+        imageCache[newCard.id] = "none";
+      }
       cards.push(newCard);
       renderCards();
 
@@ -671,6 +794,14 @@
       card.title = title;
       card.description = editDescInput.value.trim() || null;
       card.imageDataUrl = editingImageDataUrl;
+
+      // Update cache
+      if (editingImageDataUrl) {
+        imageCache[card.id] = editingImageDataUrl;
+      } else {
+        imageCache[card.id] = "none";
+      }
+
       try {
         await supabase.from("cards").update({
           title: card.title,
@@ -802,6 +933,11 @@
         if (data.cards && data.users) {
           // Upsert cards in Supabase
           for (const c of data.cards) {
+            if (c.imageDataUrl) {
+              imageCache[c.id] = c.imageDataUrl;
+            } else {
+              imageCache[c.id] = "none";
+            }
             await supabase.from("cards").upsert({
               id: c.id,
               title: c.title,
@@ -835,15 +971,75 @@
   });
 
   // --- Real-time Sync ---
+  function handleRealtimeCardChange(payload) {
+    const { eventType, new: newRow, old: oldRow } = payload;
+
+    if (eventType === "INSERT") {
+      if (!cards.some(c => c.id === newRow.id)) {
+        const newCard = {
+          id: newRow.id,
+          title: newRow.title,
+          description: newRow.description,
+          timestamp: Number(newRow.timestamp),
+          votes: newRow.votes
+        };
+        cards.push(newCard);
+        if (newRow.image_data_url) {
+          imageCache[newRow.id] = newRow.image_data_url;
+        } else {
+          imageCache[newRow.id] = "none";
+        }
+      }
+    } else if (eventType === "UPDATE") {
+      const card = cards.find(c => c.id === newRow.id);
+      if (card) {
+        card.title = newRow.title;
+        card.description = newRow.description;
+        card.timestamp = Number(newRow.timestamp);
+        card.votes = newRow.votes;
+
+        if (newRow.image_data_url) {
+          if (imageCache[newRow.id] !== newRow.image_data_url) {
+            imageCache[newRow.id] = newRow.image_data_url;
+            card.imageDataUrl = newRow.image_data_url;
+          }
+        } else {
+          imageCache[newRow.id] = "none";
+          card.imageDataUrl = null;
+        }
+      } else {
+        // If it wasn't in our local state but was updated, add it
+        const newCard = {
+          id: newRow.id,
+          title: newRow.title,
+          description: newRow.description,
+          timestamp: Number(newRow.timestamp),
+          votes: newRow.votes
+        };
+        cards.push(newCard);
+        if (newRow.image_data_url) {
+          imageCache[newRow.id] = newRow.image_data_url;
+        } else {
+          imageCache[newRow.id] = "none";
+        }
+      }
+    } else if (eventType === "DELETE") {
+      cards = cards.filter(c => c.id !== oldRow.id);
+      delete imageCache[oldRow.id];
+      delete imageFetchPromises[oldRow.id];
+    }
+
+    renderCards();
+  }
+
   function setupRealtime() {
     supabase
       .channel("public-db-changes")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "cards" },
-        async () => {
-          await loadCards();
-          renderCards();
+        (payload) => {
+          handleRealtimeCardChange(payload);
         }
       )
       .on(
@@ -866,6 +1062,7 @@
       await getOrCreateUser(currentUsername);
     }
     updateUserBar();
+    initImageObserver();
     renderCards();
     setupRealtime();
   }
