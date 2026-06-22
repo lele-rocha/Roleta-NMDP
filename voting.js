@@ -993,6 +993,9 @@
     } else if (eventType === "UPDATE") {
       const card = cards.find(c => c.id === newRow.id);
       if (card) {
+        // Detect if it was a metadata edit (title or description changed)
+        const isEdit = card.title !== newRow.title || card.description !== newRow.description;
+
         card.title = newRow.title;
         card.description = newRow.description;
         card.timestamp = Number(newRow.timestamp);
@@ -1004,8 +1007,14 @@
             card.imageDataUrl = newRow.image_data_url;
           }
         } else {
-          imageCache[newRow.id] = "none";
-          card.imageDataUrl = null;
+          // If image_data_url is null/undefined in the real-time update payload,
+          // it could be because the image was deleted or because it is too large and was omitted.
+          if (isEdit) {
+            // Since it was edited, the image might have changed or been removed. Fetch from DB to verify.
+            delete imageCache[newRow.id]; // Force re-fetch
+            triggerImageFetch(newRow.id);
+          }
+          // If it was just a vote change, do not touch the image cache!
         }
       } else {
         // If it wasn't in our local state but was updated, add it
