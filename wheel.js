@@ -22,6 +22,13 @@
   const removeBgImageBtn = document.getElementById("remove-bg-image-btn");
   const wheelCenterEl = document.querySelector(".wheel-center");
 
+  const supabaseUrl = window.SUPABASE_URL;
+  const supabaseKey = window.SUPABASE_KEY;
+  if (!supabaseUrl || !supabaseKey) {
+    console.error("Supabase credentials not found in config.js");
+  }
+  const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+
   const toggleDefaultWheelBtn = document.getElementById("toggle-default-wheel");
   const toggleCardsWheelBtn = document.getElementById("toggle-cards-wheel");
   const defaultNamesControls = document.getElementById("default-names-controls");
@@ -694,17 +701,16 @@
   // Import button event listener
   importCardsBtn.addEventListener("click", importCardsFromStorage);
 
-  function importCardsFromStorage() {
+  async function importCardsFromStorage() {
     try {
-      const raw = localStorage.getItem("roleta-nmdp-cards");
-      if (raw) {
-        const cards = JSON.parse(raw);
-        const votedCards = cards.filter(c => c.votes >= 1);
-        if (votedCards.length === 0) {
-          alert("Nenhum card com 1 ou mais votos encontrado para importar!");
-          return;
-        }
-        cardsWheelItems = votedCards.map(c => ({
+      const { data, error } = await supabase
+        .from("cards")
+        .select("*")
+        .gte("votes", 1);
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        cardsWheelItems = data.map(c => ({
           id: c.id,
           title: c.title,
           lives: c.votes
@@ -718,11 +724,11 @@
           }, 400);
         }
       } else {
-        alert("Nenhum card cadastrado com votos encontrado!");
+        alert("Nenhum card cadastrado com 1 ou mais votos encontrado no banco de dados!");
       }
     } catch (e) {
       console.error(e);
-      alert("Erro ao importar cards!");
+      alert("Erro ao importar cards do banco de dados!");
     }
   }
   winnerOverlay.addEventListener("click", (e) => {

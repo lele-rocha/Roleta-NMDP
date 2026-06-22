@@ -55,21 +55,18 @@
   let editingCardId = null;
 
   // --- User Profiles state persistence ---
-  function loadUsers() {
+  async function loadUsers() {
     try {
-      const raw = localStorage.getItem(USERS_STORAGE_KEY);
-      if (raw) {
-        users = JSON.parse(raw);
-      } else {
-        users = [];
-      }
+      const { data, error } = await supabase.from("users").select("*");
+      if (error) throw error;
+      users = (data || []).map(u => ({
+        name: u.name,
+        votedCardIds: u.voted_card_ids || []
+      }));
     } catch (e) {
+      console.error("Erro ao carregar usuários:", e);
       users = [];
     }
-  }
-
-  function saveUsers() {
-    localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users));
   }
 
   function loadSession() {
@@ -84,12 +81,20 @@
     }
   }
 
-  function getOrCreateUser(name) {
+  async function getOrCreateUser(name) {
     let user = users.find(u => u.name.toLowerCase() === name.toLowerCase());
     if (!user) {
       user = { name: name, votedCardIds: [] };
       users.push(user);
-      saveUsers();
+      try {
+        const { error } = await supabase.from("users").upsert({
+          name: user.name,
+          voted_card_ids: user.votedCardIds
+        });
+        if (error) throw error;
+      } catch (e) {
+        console.error("Erro ao criar usuário:", e);
+      }
     }
     return user;
   }
@@ -100,8 +105,8 @@
       userProfileStatus.style.display = "flex";
       activeUsername.textContent = currentUsername;
 
-      const user = getOrCreateUser(currentUsername);
-      activeUserVotes.textContent = user.votedCardIds.length;
+      const user = users.find(u => u.name.toLowerCase() === currentUsername.toLowerCase());
+      activeUserVotes.textContent = user ? user.votedCardIds.length : 0;
     } else {
       userLoginForm.style.display = "flex";
       userProfileStatus.style.display = "none";
@@ -139,21 +144,23 @@
     });
   }
 
-  // --- localStorage persistence ---
-  function loadCards() {
+  // --- Database Persistence ---
+  async function loadCards() {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        cards = JSON.parse(raw);
-      }
+      const { data, error } = await supabase.from("cards").select("*");
+      if (error) throw error;
+      cards = (data || []).map(c => ({
+        id: c.id,
+        title: c.title,
+        description: c.description,
+        imageDataUrl: c.image_data_url,
+        timestamp: Number(c.timestamp),
+        votes: c.votes
+      }));
     } catch (e) {
+      console.error("Erro ao carregar cards:", e);
       cards = [];
     }
-  }
-
-  // --- Save cards ---
-  function saveCards() {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(cards));
   }
 
   // --- Rendering ---
@@ -222,7 +229,7 @@
       `;
 
       // Vote on card click (excluding menu button, menu dropdown, or remove-vote button)
-      el.addEventListener("click", (e) => {
+      el.addEventListener("click", async (e) => {
         if (
           e.target.closest(".btn-card-menu") ||
           e.target.closest(".card-menu-dropdown") ||
@@ -237,7 +244,8 @@
           return;
         }
 
-        const user = getOrCreateUser(currentUsername);
+        const user = users.find(u => u.name.toLowerCase() === currentUsername.toLowerCase());
+        if (!user) return;
 
         // Check if already voted for this card
         if (user.votedCardIds.includes(card.id)) {
@@ -254,10 +262,14 @@
         card.votes++;
         user.votedCardIds.push(card.id);
         
-        saveCards();
-        saveUsers();
-        renderCards();
-        updateUserBar();
+        try {
+          await supabase.from("cards").update({ votes: card.votes }).eq("id", card.id);
+          await supabase.from("users").update({ voted_card_ids: user.votedCardIds }).eq("name", user.name);
+          renderCards();
+          updateUserBar();
+        } catch (err) {
+          console.error("Erro ao registrar voto:", err);
+        }
       });
 
       const menuBtn = el.querySelector(".btn-card-menu");
@@ -283,16 +295,22 @@
       });
 
       // Delete listener
-      el.querySelector(".btn-delete-card").addEventListener("click", (e) => {
+      el.querySelector(".btn-delete-card").addEventListener("click", async (e) => {
         e.stopPropagation();
         menuDropdown.hidden = true;
-        cards = cards.filter((c) => c.id !== card.id);
-        saveCards();
-        renderCards();
+        if (!confirm("Tem certeza de que deseja excluir este card?")) return;
+
+        try {
+          await supabase.from("cards").delete().eq("id", card.id);
+          cards = cards.filter((c) => c.id !== card.id);
+          renderCards();
+        } catch (err) {
+          console.error("Erro ao excluir card:", err);
+        }
       });
 
       // Remove vote listener
-      el.querySelector(".btn-remove-vote").addEventListener("click", (e) => {
+      el.querySelector(".btn-remove-vote").addEventListener("click", async (e) => {
         e.stopPropagation();
 
         if (!currentUsername) {
@@ -301,7 +319,8 @@
           return;
         }
 
-        const user = getOrCreateUser(currentUsername);
+        const user = users.find(u => u.name.toLowerCase() === currentUsername.toLowerCase());
+        if (!user) return;
         const index = user.votedCardIds.indexOf(card.id);
 
         if (index === -1) {
@@ -313,10 +332,14 @@
           card.votes--;
           user.votedCardIds.splice(index, 1);
           
-          saveCards();
-          saveUsers();
-          renderCards();
-          updateUserBar();
+          try {
+            await supabase.from("cards").update({ votes: card.votes }).eq("id", card.id);
+            await supabase.from("users").update({ voted_card_ids: user.votedCardIds }).eq("name", user.name);
+            renderCards();
+            updateUserBar();
+          } catch (err) {
+            console.error("Erro ao remover voto:", err);
+          }
         }
       });
 
@@ -396,7 +419,7 @@
   removeCardPreview.addEventListener("click", clearPreview);
 
   // --- Add card ---
-  addCardBtn.addEventListener("click", () => {
+  addCardBtn.addEventListener("click", async () => {
     const title = cardTitleInput.value.trim();
     if (!title) {
       cardTitleInput.focus();
@@ -416,14 +439,27 @@
       votes: 0,
     };
 
-    cards.push(newCard);
-    saveCards();
-    renderCards();
+    try {
+      await supabase.from("cards").insert([{
+        id: newCard.id,
+        title: newCard.title,
+        description: newCard.description,
+        image_data_url: newCard.imageDataUrl,
+        timestamp: newCard.timestamp,
+        votes: newCard.votes
+      }]);
+      
+      // Update local state and render (Real-time will also trigger, but this ensures immediate feedback)
+      cards.push(newCard);
+      renderCards();
 
-    // Reset form
-    cardTitleInput.value = "";
-    cardDescInput.value = "";
-    clearPreview();
+      // Reset form
+      cardTitleInput.value = "";
+      cardDescInput.value = "";
+      clearPreview();
+    } catch (err) {
+      console.error("Erro ao adicionar card:", err);
+    }
   });
 
   // --- Dropdown Toggle ---
@@ -440,7 +476,7 @@
   });
 
   // --- Edit Modal Handlers ---
-  saveEditBtn.addEventListener("click", () => {
+  saveEditBtn.addEventListener("click", async () => {
     const title = editTitleInput.value.trim();
     if (!title) {
       editTitleInput.focus();
@@ -450,8 +486,15 @@
     if (card) {
       card.title = title;
       card.description = editDescInput.value.trim() || null;
-      saveCards();
-      renderCards();
+      try {
+        await supabase.from("cards").update({
+          title: card.title,
+          description: card.description
+        }).eq("id", card.id);
+        renderCards();
+      } catch (err) {
+        console.error("Erro ao editar card:", err);
+      }
     }
     editOverlay.hidden = true;
     editingCardId = null;
@@ -489,14 +532,14 @@
   cardSortSelect.addEventListener("change", renderCards);
 
   // --- User Session Listeners ---
-  loginBtn.addEventListener("click", () => {
+  loginBtn.addEventListener("click", async () => {
     const name = usernameInput.value.trim();
     if (!name) {
       usernameInput.focus();
       return;
     }
     currentUsername = name;
-    getOrCreateUser(currentUsername);
+    await getOrCreateUser(currentUsername);
     saveSession();
     updateUserBar();
     renderCards();
@@ -509,29 +552,34 @@
     renderCards();
   });
 
-  clearVotesBtn.addEventListener("click", () => {
+  clearVotesBtn.addEventListener("click", async () => {
     if (!currentUsername) return;
 
     const confirmClear = confirm("Tem certeza que deseja remover todos os seus votos? Esta ação não pode ser desfeita.");
     if (!confirmClear) return;
 
-    const user = getOrCreateUser(currentUsername);
+    const user = users.find(u => u.name.toLowerCase() === currentUsername.toLowerCase());
+    if (!user) return;
 
-    // Decrement vote counts on all cards the user voted for
-    user.votedCardIds.forEach((cardId) => {
-      const card = cards.find((c) => c.id === cardId);
-      if (card && card.votes > 0) {
-        card.votes--;
+    try {
+      // Decrement vote counts on all cards the user voted for
+      for (const cardId of user.votedCardIds) {
+        const card = cards.find((c) => c.id === cardId);
+        if (card && card.votes > 0) {
+          card.votes--;
+          await supabase.from("cards").update({ votes: card.votes }).eq("id", card.id);
+        }
       }
-    });
 
-    // Reset user votedCardIds
-    user.votedCardIds = [];
+      // Reset user votedCardIds
+      user.votedCardIds = [];
+      await supabase.from("users").update({ voted_card_ids: [] }).eq("name", user.name);
 
-    saveCards();
-    saveUsers();
-    updateUserBar();
-    renderCards();
+      updateUserBar();
+      renderCards();
+    } catch (err) {
+      console.error("Erro ao limpar votos:", err);
+    }
   });
 
   // --- Backup Data Listeners ---
@@ -560,17 +608,33 @@
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       try {
         const data = JSON.parse(event.target.result);
         if (data.cards && data.users) {
-          cards = data.cards;
-          users = data.users;
-          saveCards();
-          saveUsers();
+          // Upsert cards in Supabase
+          for (const c of data.cards) {
+            await supabase.from("cards").upsert({
+              id: c.id,
+              title: c.title,
+              description: c.description,
+              image_data_url: c.imageDataUrl,
+              timestamp: c.timestamp,
+              votes: c.votes
+            });
+          }
+          // Upsert users in Supabase
+          for (const u of data.users) {
+            await supabase.from("users").upsert({
+              name: u.name,
+              voted_card_ids: u.votedCardIds
+            });
+          }
+          await loadCards();
+          await loadUsers();
           renderCards();
           updateUserBar();
-          alert("Backup importado com sucesso!");
+          alert("Backup importado com sucesso e sincronizado no banco de dados!");
         } else {
           alert("Arquivo de backup inválido! O arquivo deve conter cards e usuários.");
         }
@@ -582,10 +646,40 @@
     e.target.value = "";
   });
 
+  // --- Real-time Sync ---
+  function setupRealtime() {
+    supabase
+      .channel("public-db-changes")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "cards" },
+        async () => {
+          await loadCards();
+          renderCards();
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "users" },
+        async () => {
+          await loadUsers();
+          updateUserBar();
+        }
+      )
+      .subscribe();
+  }
+
   // --- Init ---
-  loadCards();
-  loadUsers();
-  loadSession();
-  updateUserBar();
-  renderCards();
+  async function init() {
+    await loadUsers();
+    await loadCards();
+    loadSession();
+    if (currentUsername) {
+      await getOrCreateUser(currentUsername);
+    }
+    updateUserBar();
+    renderCards();
+    setupRealtime();
+  }
+  init();
 })();
