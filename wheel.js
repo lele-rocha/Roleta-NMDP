@@ -733,7 +733,24 @@
       if (error) throw error;
 
       if (data && data.length > 0) {
-        cardsWheelItems = data.map(c => ({
+        const categorySelect = document.getElementById("wheel-card-category-select");
+        const category = categorySelect ? categorySelect.value : "games";
+
+        const filteredData = data.filter(c => {
+          if (category === "anime") {
+            return c.id.startsWith("anime_");
+          } else if (category === "games") {
+            return !c.id.startsWith("anime_");
+          }
+          return true; // "all"
+        });
+
+        if (filteredData.length === 0) {
+          alert(`Nenhum card com 1 ou mais votos encontrado para a categoria selecionada (${category === "anime" ? "Anime" : category === "games" ? "Games" : "Todos"})!`);
+          return;
+        }
+
+        cardsWheelItems = filteredData.map(c => ({
           id: c.id,
           title: c.title,
           lives: c.votes

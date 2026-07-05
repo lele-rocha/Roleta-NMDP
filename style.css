@@ -130,6 +130,51 @@ body {
   border-radius: 2px 2px 0 0;
 }
 
+/* Gallery Tabs Segment Selector */
+.gallery-tabs {
+  display: flex;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 4px;
+  gap: 4px;
+  margin-bottom: 2rem;
+  max-width: 320px;
+}
+
+.gallery-tab {
+  all: unset;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.6rem 1.25rem;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 0.95rem;
+  font-weight: 700;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-sizing: border-box;
+  text-align: center;
+  user-select: none;
+}
+
+.gallery-tab:hover:not(.active) {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.gallery-tab.active {
+  color: #fff;
+  background: var(--accent);
+  box-shadow: 0 4px 12px var(--accent-glow);
+}
+
 .tab-panels {
   flex: 1;
   padding: 1.25rem 1.5rem;

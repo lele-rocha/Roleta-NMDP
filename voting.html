@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Roleta NMDP - Voting Gallery</title>
-  <link rel="stylesheet" href="style.css?v=13">
+  <link rel="stylesheet" href="style.css?v=14">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
@@ -28,7 +28,7 @@
       </div>
       <div id="user-profile-status" class="user-session-profile" style="display: none;">
         <span>Usuário ativo: <strong id="active-username" class="accent-text"></strong></span>
-        <span class="user-votes-status">Votos castados: <strong id="active-user-votes">0</strong>/20</span>
+        <span class="user-votes-status">Votos castados (<span id="active-user-votes-category">Games</span>): <strong id="active-user-votes">0</strong>/20</span>
         <button type="button" id="logout-btn" class="btn-secondary-sm">Sair</button>
         <button type="button" id="clear-votes-btn" class="btn-danger-sm" title="Limpar todos os meus votos">Limpar Votos</button>
       </div>
@@ -60,6 +60,9 @@
         </button>
         <div id="voting-controls-dropdown" class="voting-controls-dropdown" hidden>
           <div class="voting-form">
+            <div class="setting-group" style="margin-bottom: 0.75rem;">
+              <span class="setting-desc" style="font-size: 0.85rem; color: var(--text-muted);">Criando card na categoria: <strong id="active-category-form-badge" style="color: var(--accent); font-weight: 700; text-transform: uppercase;">Games</strong></span>
+            </div>
             <div class="setting-group">
               <label class="label" for="card-title-input">Título do Card</label>
               <input type="text" id="card-title-input" class="input-text" placeholder="Digite o título" />
@@ -90,6 +93,11 @@
       </div>
 
       <section class="voting-gallery">
+        <nav class="gallery-tabs">
+          <button type="button" class="gallery-tab active" data-category="games">🎮 Games</button>
+          <button type="button" class="gallery-tab" data-category="anime">🍿 Anime</button>
+        </nav>
+
         <div class="voting-gallery-header">
           <h2 class="voting-title">Galeria de Votos</h2>
           <div class="voting-sort-row">
@@ -139,7 +147,7 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js?v=13"></script>
-  <script src="voting.js?v=13"></script>
+  <script src="config.js?v=14"></script>
+  <script src="voting.js?v=14"></script>
 </body>
 </html>

@@ -66,10 +66,16 @@
   let editingCardId = null;
   let editingImageDataUrl = null;
 
+  // Category State
+  let currentCategory = "games"; // "games" or "anime"
+
   // Image cache and fetching state
   const imageCache = {}; // cardId -> base64 or 'none'
   const imageFetchPromises = {}; // cardId -> Promise
   let imageObserver = null;
+
+  // Tab and form indicators
+  const activeCategoryFormBadge = document.getElementById("active-category-form-badge");
 
   // --- User Profiles state persistence ---
   async function loadUsers() {
@@ -123,7 +129,22 @@
       activeUsername.textContent = currentUsername;
 
       const user = users.find(u => u.name.toLowerCase() === currentUsername.toLowerCase());
-      activeUserVotes.textContent = user ? user.votedCardIds.length : 0;
+      
+      // Calculate category specific votes
+      let categoryVotes = 0;
+      if (user) {
+        if (currentCategory === "anime") {
+          categoryVotes = user.votedCardIds.filter(id => id.startsWith("anime_")).length;
+        } else {
+          categoryVotes = user.votedCardIds.filter(id => !id.startsWith("anime_")).length;
+        }
+      }
+      activeUserVotes.textContent = categoryVotes;
+
+      const categoryLabelEl = document.getElementById("active-user-votes-category");
+      if (categoryLabelEl) {
+        categoryLabelEl.textContent = currentCategory === "anime" ? "Anime" : "Games";
+      }
     } else {
       userLoginForm.style.display = "flex";
       userProfileStatus.style.display = "none";
@@ -145,8 +166,8 @@
     const isAdmin = currentUsername && currentUsername.toLowerCase() === "lele";
 
     sortedUsers.forEach((user) => {
-      const cardCount = user.votedCardIds.length;
-      const remaining = Math.max(0, 20 - cardCount);
+      const gamesCount = user.votedCardIds.filter(id => !id.startsWith("anime_")).length;
+      const animeCount = user.votedCardIds.filter(id => id.startsWith("anime_")).length;
       
       const el = document.createElement("div");
       el.className = "user-status-card";
@@ -161,7 +182,9 @@
       el.innerHTML = `
         ${deleteBtnHtml}
         <span class="user-status-card__name">${escapeHtml(user.name)}</span>
-        <span class="user-status-card__votes">Votos: <strong>${cardCount}</strong>/20 (Restam: <strong>${remaining}</strong>)</span>
+        <span class="user-status-card__votes" style="font-size: 0.75rem;">
+          Games: <strong>${gamesCount}</strong>/20 | Anime: <strong>${animeCount}</strong>/20
+        </span>
       `;
       usersListContainer.appendChild(el);
     });
@@ -318,7 +341,17 @@
   // --- Rendering ---
   function renderCards() {
     const sortMode = cardSortSelect.value;
-    const sorted = [...cards];
+
+    // Filter cards by category
+    const categoryCards = cards.filter(c => {
+      if (currentCategory === "anime") {
+        return c.id.startsWith("anime_");
+      } else {
+        return !c.id.startsWith("anime_");
+      }
+    });
+
+    const sorted = [...categoryCards];
 
     if (sortMode === "votes") {
       sorted.sort((a, b) => b.votes - a.votes);
@@ -330,6 +363,9 @@
 
     if (sorted.length === 0) {
       cardsEmptyMsg.hidden = false;
+      cardsEmptyMsg.textContent = currentCategory === "anime"
+        ? "Nenhum anime adicionado ainda. Crie o primeiro acima!"
+        : "Nenhum card adicionado ainda. Crie o primeiro acima!";
       return;
     }
     cardsEmptyMsg.hidden = true;
@@ -422,9 +458,17 @@
           return;
         }
 
-        // Check if 20 votes limit reached
-        if (user.votedCardIds.length >= 20) {
-          alert("Você já esgotou seu limite de 20 votos!");
+        // Check if 20 votes limit reached for active category
+        const categoryVotesCount = user.votedCardIds.filter(id => {
+          if (currentCategory === "anime") {
+            return id.startsWith("anime_");
+          } else {
+            return !id.startsWith("anime_");
+          }
+        }).length;
+
+        if (categoryVotesCount >= 20) {
+          alert(`Você já esgotou seu limite de 20 votos para a categoria ${currentCategory === "anime" ? "Anime" : "Games"}!`);
           return;
         }
 
@@ -749,8 +793,10 @@
 
     const description = cardDescInput.value.trim();
 
+    const generatedId = currentCategory === "anime" ? `anime_${generateId()}` : generateId();
+
     const newCard = {
-      id: generateId(),
+      id: generatedId,
       title: title,
       description: description || null,
       imageDataUrl: pendingImageDataUrl,
@@ -1118,6 +1164,26 @@
     initImageObserver();
     setupDragAndDrop(addDropZone, cardImageInput, showPreview);
     setupDragAndDrop(editDropZone, editImageInput, showEditPreview);
+
+    // Bind tab clicks using robust event delegation
+    document.addEventListener("click", (e) => {
+      const tab = e.target.closest(".gallery-tab");
+      if (!tab) return;
+
+      document.querySelectorAll(".gallery-tab").forEach(t => t.classList.remove("active"));
+      tab.classList.add("active");
+      currentCategory = tab.dataset.category;
+
+      // Update form badge
+      if (activeCategoryFormBadge) {
+        activeCategoryFormBadge.textContent = currentCategory === "anime" ? "Anime" : "Games";
+      }
+
+      // Re-render and update UI
+      updateUserBar();
+      renderCards();
+    });
+
     renderCards();
     setupRealtime();
   }

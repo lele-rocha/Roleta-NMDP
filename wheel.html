@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Roleta NMDP - Wheel</title>
-  <link rel="stylesheet" href="style.css?v=13">
+  <link rel="stylesheet" href="style.css?v=14">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
@@ -39,9 +39,17 @@
 
             <!-- Cards Wheel controls -->
             <div id="cards-names-controls" style="display: none;">
+              <div style="margin-bottom: 0.75rem;">
+                <label for="wheel-card-category-select" class="label" style="font-size: 0.85rem; margin-bottom: 0.25rem;">Filtrar por Categoria:</label>
+                <select id="wheel-card-category-select" style="width: 100%; padding: 0.5rem 0.75rem; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 8px; font-family: inherit; font-size: 0.9rem; font-weight: 600; cursor: pointer; outline: none; transition: border-color 0.2s;">
+                  <option value="games">🎮 Games</option>
+                  <option value="anime">🍿 Anime</option>
+                  <option value="all">🌐 Todos</option>
+                </select>
+              </div>
               <div style="display: flex; gap: 0.75rem; margin-bottom: 1.25rem;">
                 <button type="button" id="import-cards-btn" class="btn-primary" style="flex: 1; margin-bottom: 0;">
-                  📥 Importar Cards Votados
+                  📥 Importar Cards
                 </button>
                 <button type="button" id="clear-cards-btn" class="btn-secondary" style="display: flex; align-items: center; justify-content: center; padding: 0.625rem;" title="Limpar Cards">
                   🗑️ Limpar
@@ -142,7 +150,7 @@
     </div>
   </div>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js?v=13"></script>
-  <script src="wheel.js?v=13"></script>
+  <script src="config.js?v=14"></script>
+  <script src="wheel.js?v=14"></script>
 </body>
 </html>
