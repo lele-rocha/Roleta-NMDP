@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Roleta NMDP - Tier List</title>
+  <link rel="stylesheet" href="style.css?v=15">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="app">
+    <nav class="top-nav">
+      <div class="top-nav__brand">Roleta NMDP</div>
+      <div class="top-nav__links">
+        <a href="wheel.html" class="top-nav__link">🎡 Wheel</a>
+        <a href="voting.html" class="top-nav__link">🗳️ Voting Gallery</a>
+        <a href="tierlist.html" class="top-nav__link active">🏆 Tier List</a>
+      </div>
+    </nav>
+
+    <header class="header">
+      <h1>Criador de Tier List</h1>
+      <p class="subtitle">Crie, customize e ordene itens em categorias personalizadas</p>
+    </header>
+
+    <main class="voting-main">
+      <!-- 1. SETUP / CREATION LANDING SCREEN -->
+      <section id="tierlist-setup-screen" class="panel" style="max-width: 540px; margin: 1rem auto 3rem; padding: 2rem;">
+        <h2 class="edit-modal__title" style="margin-bottom: 1.5rem; text-align: center; font-size: 1.6rem; border-bottom: 1px solid var(--border); padding-bottom: 1rem;">Novo Tabuleiro de Tier List</h2>
+        
+        <div class="setting-group" style="margin-bottom: 1.25rem;">
+          <label class="label" for="setup-title-input">Título da Tier List</label>
+          <input type="text" id="setup-title-input" class="input-text" placeholder="Ex: Minha Tier List de Jogos" value="Minha Tier List" />
+        </div>
+
+        <div class="setting-group" style="margin-bottom: 1.25rem;">
+          <label class="label">Modelo Inicial de Linhas</label>
+          <div style="display: flex; gap: 0.75rem; margin-top: 0.35rem;">
+            <label style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 0.5rem; padding: 0.75rem; background: var(--surface-raised); border: 1px solid var(--border); border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 0.95rem; text-align: center;">
+              <input type="radio" name="setup-template" value="classic" checked style="accent-color: var(--accent);" />
+              Padrão (S a F)
+            </label>
+            <label style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 0.5rem; padding: 0.75rem; background: var(--surface-raised); border: 1px solid var(--border); border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 0.95rem; text-align: center;">
+              <input type="radio" name="setup-template" value="blank" style="accent-color: var(--accent);" />
+              Em Branco
+            </label>
+          </div>
+        </div>
+
+        <div class="setting-group" style="margin-bottom: 1.5rem; padding: 1rem; background: rgba(255,255,255,0.02); border-radius: 10px; border: 1px solid var(--border);">
+          <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-weight: 700; font-size: 0.95rem;">
+            <input type="checkbox" id="setup-import-checkbox" style="width: 16px; height: 16px; accent-color: var(--accent);" />
+            Pré-importar imagens da Galeria de Votos
+          </label>
+          
+          <div id="setup-import-options" style="display: none; margin-top: 1rem; flex-direction: column; gap: 0.75rem; border-top: 1px solid var(--border); padding-top: 0.75rem;">
+            <div style="display: flex; gap: 0.75rem;">
+              <div style="flex: 1;">
+                <label class="label" style="font-size: 0.8rem; margin-bottom: 0.25rem;">Categoria</label>
+                <select id="setup-import-category" class="input-text" style="width: 100%; padding: 0.4rem; background: var(--surface); border: 1px solid var(--border); color: var(--text); border-radius: 6px; font-size: 0.85rem;">
+                  <option value="all">Todos</option>
+                  <option value="games">🎮 Games</option>
+                  <option value="anime">🍿 Anime</option>
+                </select>
+              </div>
+              <div style="flex: 1;">
+                <label class="label" style="font-size: 0.8rem; margin-bottom: 0.25rem;">Votos</label>
+                <select id="setup-import-votes" class="input-text" style="width: 100%; padding: 0.4rem; background: var(--surface); border: 1px solid var(--border); color: var(--text); border-radius: 6px; font-size: 0.85rem;">
+                  <option value="all">Qualquer voto</option>
+                  <option value="voted">Votos >= 1</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <button type="button" id="start-creation-btn" class="btn-primary" style="width: 100%; padding: 0.9rem;">🚀 Começar a Criar</button>
+      </section>
+
+      <!-- 2. MAIN EDITING BOARD SCREEN (HIDDEN BY DEFAULT) -->
+      <div id="tierlist-edit-screen" style="display: none; flex-direction: column; gap: 1.5rem;">
+        <!-- Header Active Title -->
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 0.75rem;">
+          <h2 id="active-tierlist-title" class="voting-title" style="margin: 0; font-size: 1.5rem; color: var(--accent);">Minha Tier List</h2>
+        </div>
+
+        <!-- Actions Panel -->
+        <section class="panel" style="padding: 1.25rem 1.5rem;">
+          <div class="tierlist-actions-bar">
+            <div class="tierlist-btn-group">
+              <button type="button" id="go-back-setup-btn" class="btn-secondary-sm" title="Criar outro tabuleiro e voltar ao início">⬅️ Novo Tabuleiro</button>
+              <button type="button" id="add-row-btn" class="btn-primary-sm">➕ Adicionar Linha</button>
+              <button type="button" id="reset-tiers-btn" class="btn-secondary-sm">🔄 Resetar Tiers</button>
+              <button type="button" id="clear-items-btn" class="btn-secondary-sm">🧹 Limpar Tabuleiro</button>
+              <button type="button" id="clear-all-btn" class="btn-danger-sm">🗑️ Limpar Tudo</button>
+            </div>
+            <div class="tierlist-btn-group">
+              <button type="button" id="open-import-modal-btn" class="btn-secondary-sm" style="background: rgba(108, 92, 231, 0.15); border: 1px solid var(--accent); color: var(--text);">📥 Importar da Galeria</button>
+              <button type="button" id="download-png-btn" class="btn-primary-sm" style="background: linear-gradient(135deg, #00b894, #00dec9); box-shadow: 0 4px 12px rgba(0, 184, 148, 0.3);">💾 Salvar PNG</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- Upload Panel -->
+        <section class="panel" style="padding: 1.25rem 1.5rem;">
+          <div class="tierlist-upload-container">
+            <div id="tier-upload-dropzone" class="image-drop-zone" style="height: 100px;">
+              <p>Arraste imagens aqui ou clique para fazer upload</p>
+              <input type="file" id="tier-image-input" accept="image/*" multiple style="display: none;" />
+            </div>
+          </div>
+        </section>
+
+        <!-- Tier List Board -->
+        <section id="tier-list-board" class="tier-board-container"></section>
+
+        <!-- Unplaced Images Bank -->
+        <section class="panel" style="padding: 1.5rem;">
+          <h3 class="label" style="margin-bottom: 0.75rem;">Banco de Imagens (Arraste para as categorias)</h3>
+          <div id="unplaced-images-bank" class="unplaced-images-bank dropzone" data-bank="true">
+            <p class="empty-bank-msg" style="color: var(--text-muted); font-size: 0.9rem; text-align: center; width: 100%; padding: 1rem 0;">
+              O banco está vazio. Importe da galeria de votos ou faça upload de imagens locais acima!
+            </p>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <!-- Row Settings Modal Overlay -->
+  <div class="edit-overlay" id="row-settings-overlay" hidden>
+    <div class="edit-modal">
+      <h2 class="edit-modal__title">Configurações da Linha</h2>
+      
+      <div class="setting-group">
+        <label class="label" for="row-label-input">Rótulo (Texto)</label>
+        <input type="text" id="row-label-input" class="input-text" maxlength="25" />
+      </div>
+
+      <div class="setting-group">
+        <label class="label">Cor do Rótulo</label>
+        <div class="color-presets-grid" id="color-presets-grid">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+
+      <div class="edit-modal__actions" style="margin-top: 1.5rem; display: flex; gap: 0.75rem; justify-content: flex-end;">
+        <button type="button" id="delete-row-confirm-btn" class="btn-danger" style="margin-right: auto;">Excluir Linha</button>
+        <button type="button" id="cancel-row-settings-btn" class="btn-secondary">Cancelar</button>
+        <button type="button" id="save-row-settings-btn" class="btn-primary">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Import Modal Overlay -->
+  <div class="edit-overlay" id="import-overlay" hidden>
+    <div class="edit-modal" style="max-width: 420px; text-align: center;">
+      <h2 class="edit-modal__title" style="margin-bottom: 0.5rem;">Importar da Galeria</h2>
+      <p class="setting-desc" style="margin-bottom: 1.5rem; color: var(--text-muted); font-size: 0.9rem;">Escolha qual galeria você deseja importar para o tabuleiro:</p>
+      
+      <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+        <button type="button" id="import-games-choice-btn" class="btn-primary" style="background: linear-gradient(135deg, var(--accent), #8c7ae6); padding: 0.85rem; font-size: 1rem; width: 100%;">
+          🎮 Importar Galeria de Games
+        </button>
+        <button type="button" id="import-anime-choice-btn" class="btn-primary" style="background: linear-gradient(135deg, #ff7675, #ff7fbf); padding: 0.85rem; font-size: 1rem; width: 100%;">
+          🍿 Importar Galeria de Animes
+        </button>
+        <button type="button" id="import-all-choice-btn" class="btn-secondary" style="padding: 0.85rem; font-size: 1rem; width: 100%; border: 1px dashed var(--border);">
+          🌐 Importar Ambas Galerias
+        </button>
+      </div>
+
+      <div class="edit-modal__actions" style="margin-top: 1.5rem; display: flex; justify-content: center;">
+        <button type="button" id="cancel-import-btn" class="btn-secondary" style="width: 100%;">Cancelar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- External libraries and scripts -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js?v=15"></script>
+  <script src="tierlist.js?v=15"></script>
+</body>
+</html>
