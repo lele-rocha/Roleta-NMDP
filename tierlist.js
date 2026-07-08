@@ -136,7 +136,11 @@
       });
     });
 
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    } catch (quotaError) {
+      console.warn("LocalStorage quota exceeded: saving local state draft failed.", quotaError);
+    }
     updateEmptyBankMessage();
   }
 
@@ -263,6 +267,7 @@
     img.draggable = true;
 
     setupDragEvents(img);
+    setupHoverPreview(img);
     return img;
   }
 
@@ -283,6 +288,63 @@
       draggedEl = null;
       saveBoardState();
     });
+  }
+
+  // --- Hover Preview Logic ---
+
+  function setupHoverPreview(el) {
+    el.addEventListener("mouseenter", (e) => {
+      // Don't show preview if dragging
+      if (draggedEl) return;
+
+      const previewImg = document.getElementById("image-hover-preview-img");
+      const previewTitle = document.getElementById("image-hover-preview-title");
+      const previewPopup = document.getElementById("image-hover-preview");
+
+      if (previewImg && previewTitle && previewPopup) {
+        previewImg.src = el.src;
+        previewTitle.textContent = el.title || "Sem Título";
+
+        // Position popup near cursor
+        previewPopup.style.display = "block";
+        previewPopup.style.left = e.clientX + "px";
+        previewPopup.style.top = e.clientY + "px";
+
+        // Trigger transition fade-in
+        setTimeout(() => {
+          previewPopup.classList.add("visible");
+        }, 10);
+      }
+    });
+
+    el.addEventListener("mousemove", (e) => {
+      const previewPopup = document.getElementById("image-hover-preview");
+      if (previewPopup && previewPopup.classList.contains("visible")) {
+        previewPopup.style.left = e.clientX + "px";
+        previewPopup.style.top = e.clientY + "px";
+      }
+    });
+
+    el.addEventListener("mouseleave", () => {
+      hideHoverPreview();
+    });
+
+    el.addEventListener("dragstart", () => {
+      hideHoverPreview();
+    });
+  }
+
+  function hideHoverPreview() {
+    const previewPopup = document.getElementById("image-hover-preview");
+    if (previewPopup) {
+      previewPopup.classList.remove("visible");
+      // Hide container after transition ends
+      setTimeout(() => {
+        if (!previewPopup.classList.contains("visible")) {
+          previewPopup.style.display = "none";
+        }
+      }, 150);
+    }
   }
 
   function setupDropzoneEvents(zone) {
@@ -780,7 +842,15 @@
 
   async function renderSavedBoards() {
     if (!savedBoardsList) return;
-    savedBoardsList.innerHTML = "";
+    
+    // 1. Show immediate loading spinner
+    savedBoardsList.innerHTML = `
+      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 4rem 0; width: 100%;">
+        <div style="width: 40px; height: 40px; border: 4px solid rgba(255, 255, 255, 0.1); border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 1rem;"></div>
+        <p style="color: var(--text-muted); font-size: 0.95rem;">Carregando tabuleiros da nuvem...</p>
+      </div>
+    `;
+    
     databaseErrorNotice.hidden = true;
     databaseErrorNotice.innerHTML = "";
 
@@ -790,9 +860,10 @@
     }
 
     try {
+      // 2. Query only metadata columns to ensure instant speed
       const { data, error } = await supabase
         .from("tier_lists")
-        .select("*")
+        .select("id, title, created_by, updated_at")
         .order("updated_at", { ascending: false });
 
       if (error) throw error;
@@ -806,6 +877,9 @@
         return;
       }
 
+      // Clear spinner and render cards
+      savedBoardsList.innerHTML = "";
+
       data.forEach(board => {
         const card = document.createElement("div");
         card.className = "saved-board-card";
@@ -816,32 +890,37 @@
         titleEl.textContent = board.title || "Sem Título";
         card.appendChild(titleEl);
 
-        // 2. Mini CSS preview of layout
+        // 2. Mini CSS preview of layout (Generic, fast-loading placeholder visual)
         const previewEl = document.createElement("div");
         previewEl.className = "mini-board-preview";
 
-        const tiers = board.tiers || [];
-        tiers.forEach(tier => {
+        const placeholderTiers = [
+          { color: "#ff7f7f", count: 2 },
+          { color: "#ffbf7f", count: 3 },
+          { color: "#ffdf7f", count: 1 },
+          { color: "#ffff7f", count: 2 },
+          { color: "#7fff7f", count: 0 },
+          { color: "#7fbbff", count: 1 }
+        ];
+
+        placeholderTiers.forEach(tier => {
           const rowEl = document.createElement("div");
           rowEl.className = "mini-board-row";
 
           const labelEl = document.createElement("div");
           labelEl.className = "mini-board-label";
-          labelEl.style.backgroundColor = tier.color || "#7fbbff";
+          labelEl.style.backgroundColor = tier.color;
           rowEl.appendChild(labelEl);
 
           const itemsEl = document.createElement("div");
           itemsEl.className = "mini-board-items";
 
-          const items = tier.items || [];
-          items.forEach(item => {
+          for (let i = 0; i < tier.count; i++) {
             const itemEl = document.createElement("div");
             itemEl.className = "mini-board-item";
-            if (item.src) {
-              itemEl.style.backgroundImage = `url(${item.src})`;
-            }
+            itemEl.style.background = "rgba(255, 255, 255, 0.15)";
             itemsEl.appendChild(itemEl);
-          });
+          }
 
           rowEl.appendChild(itemsEl);
           previewEl.appendChild(rowEl);
@@ -867,26 +946,52 @@
 
         card.appendChild(footerEl);
 
-        // Click event on whole card to edit/load
-        card.addEventListener("click", () => {
-          activeBoardId = board.id;
-          boardTitle = board.title;
-          tiersData = JSON.parse(JSON.stringify(board.tiers));
-          bankData = JSON.parse(JSON.stringify(board.bank));
-          activeEditing = true;
+        // Click event on whole card to edit/load details ON DEMAND
+        card.addEventListener("click", async () => {
+          // Prevent double clicks
+          if (card.dataset.loading === "true") return;
+          card.dataset.loading = "true";
+          
+          const originalTitle = titleEl.textContent;
+          titleEl.textContent = "⏳ Carregando...";
 
-          saveBoardState();
+          try {
+            // Lazy load the full tiers and bank payload point-lookup query
+            const { data: details, error: detailsError } = await supabase
+              .from("tier_lists")
+              .select("tiers, bank")
+              .eq("id", board.id)
+              .single();
 
-          // Switch to editor
-          activeTierlistTitle.textContent = boardTitle;
-          renderBoard();
-          renderBank();
+            if (detailsError) throw detailsError;
 
-          landingWrapper.style.display = "none";
-          editScreen.style.display = "flex";
+            // Load details into editor state
+            activeBoardId = board.id;
+            boardTitle = board.title;
+            tiersData = JSON.parse(JSON.stringify(details.tiers || []));
+            bankData = JSON.parse(JSON.stringify(details.bank || []));
+            activeEditing = true;
 
-          // Show delete board button since it is a saved board
-          deleteBoardBtn.style.display = "inline-block";
+            // Switch to editor
+            activeTierlistTitle.textContent = boardTitle;
+            renderBoard();
+            renderBank();
+
+            // Save the newly rendered state to local storage
+            saveBoardState();
+
+            landingWrapper.style.display = "none";
+            editScreen.style.display = "flex";
+
+            // Show delete board button since it is a saved board
+            deleteBoardBtn.style.display = "inline-block";
+          } catch (err) {
+            console.error("Erro ao carregar detalhes:", err);
+            const errMsg = err.message || err.details || (typeof err === "object" ? JSON.stringify(err) : err);
+            alert("Não foi possível abrir o tabuleiro: " + errMsg);
+            titleEl.textContent = originalTitle;
+            card.dataset.loading = "false";
+          }
         });
 
         savedBoardsList.appendChild(card);
@@ -894,7 +999,6 @@
     } catch (err) {
       console.error(err);
       if (err.code === "PGRST205" || err.status === 404) {
-        // Table does not exist in schema cache - render schema instructions
         showDatabaseErrorInstructions();
       } else {
         savedBoardsList.innerHTML = `<p style="color: #ff7675; text-align: center; padding: 2rem 0; width:100%;">Erro ao carregar os tabuleiros do Supabase.</p>`;
@@ -1060,30 +1164,34 @@ CREATE POLICY "Allow delete" ON public.tier_lists FOR DELETE USING (true);</pre>
   });
 
   goBackSetupBtn.addEventListener("click", () => {
-    const confirmNew = confirm("Deseja voltar ao menu? Lembre-se de salvar suas alterações!");
-    if (!confirmNew) return;
+    try {
+      const confirmNew = confirm("Deseja voltar ao menu? Lembre-se de salvar suas alterações!");
+      if (!confirmNew) return;
 
-    activeEditing = false;
-    activeBoardId = null;
-    boardTitle = "Minha Tier List";
-    tiersData = JSON.parse(JSON.stringify(DEFAULT_TIERS));
-    bankData = [];
-    
-    saveBoardState();
+      activeEditing = false;
+      activeBoardId = null;
+      boardTitle = "Minha Tier List";
+      tiersData = JSON.parse(JSON.stringify(DEFAULT_TIERS));
+      bankData = [];
+      
+      saveBoardState();
 
-    // Toggle screens
-    editScreen.style.display = "none";
-    landingWrapper.style.display = "flex";
-    renderSavedBoards();
+      // Toggle screens
+      if (editScreen) editScreen.style.display = "none";
+      if (landingWrapper) landingWrapper.style.display = "flex";
+      renderSavedBoards();
 
-    // Reset setup inputs
-    setupTitleInput.value = "Minha Tier List";
-    setupImportCheckbox.checked = false;
-    setupImportOptions.style.display = "none";
-    
-    // Reset collapse state
-    setupCollapseContainer.classList.remove("expanded");
-    toggleSetupBtn.innerHTML = "<span>➕ Criar Novo Tabuleiro</span>";
+      // Reset setup inputs
+      if (setupTitleInput) setupTitleInput.value = "Minha Tier List";
+      if (setupImportCheckbox) setupImportCheckbox.checked = false;
+      if (setupImportOptions) setupImportOptions.style.display = "none";
+      
+      // Reset collapse state
+      if (setupCollapseContainer) setupCollapseContainer.classList.remove("expanded");
+      if (toggleSetupBtn) toggleSetupBtn.innerHTML = "<span>➕ Criar Novo Tabuleiro</span>";
+    } catch (err) {
+      console.error("Erro ao voltar para a tela inicial:", err);
+    }
   });
 
   // --- Initialization ---

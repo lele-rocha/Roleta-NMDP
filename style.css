@@ -2027,3 +2027,51 @@ select {
   align-items: center;
   gap: 0.25rem;
 }
+
+/* ============================
+   Image Hover Preview Popup
+   ============================ */
+#image-hover-preview {
+  position: fixed;
+  pointer-events: none;
+  z-index: 10000;
+  opacity: 0;
+  background: rgba(15, 17, 23, 0.95);
+  border: 1.5px solid var(--accent);
+  border-radius: 12px;
+  padding: 0.5rem;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+  transform: translate(15px, 15px);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  max-width: 280px;
+}
+
+#image-hover-preview.visible {
+  opacity: 1;
+}
+
+#image-hover-preview-img {
+  max-width: 260px;
+  max-height: 260px;
+  border-radius: 8px;
+  display: block;
+  object-fit: contain;
+  background: #000;
+}
+
+#image-hover-preview-title {
+  color: var(--text);
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-align: center;
+  margin-top: 0.4rem;
+  max-width: 260px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
