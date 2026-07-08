@@ -1732,7 +1732,7 @@ select {
   justify-content: center;
   text-align: center;
   padding: 0.5rem;
-  font-size: 1.1rem;
+  font-size: 0.85rem;
   font-weight: 800;
   color: #0f1117;
   word-break: break-word;
@@ -1883,4 +1883,147 @@ select {
     height: 32px;
     font-size: 1rem;
   }
+}
+
+/* ============================
+   Saved Tier Lists Gallery & CSS Miniatures
+   ============================ */
+
+#tierlist-landing-wrapper {
+  margin: 1rem auto 3rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  width: 100%;
+}
+
+/* Setup Collapse animation */
+.setup-collapse-container {
+  overflow: hidden;
+  transition: max-height 0.4s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease-out;
+  max-height: 0;
+  opacity: 0;
+  width: 100%;
+}
+
+.setup-collapse-container.expanded {
+  max-height: 800px;
+  opacity: 1;
+}
+
+#saved-boards-list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.5rem;
+  width: 100%;
+}
+
+@media (min-width: 650px) {
+  #saved-boards-list {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (min-width: 950px) {
+  #saved-boards-list {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+}
+
+.saved-board-card {
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  transition: border-color 0.25s ease, transform 0.2s ease, box-shadow 0.2s ease;
+  position: relative;
+  cursor: pointer;
+}
+
+.saved-board-card:hover {
+  border-color: var(--accent);
+  transform: translateY(-3px);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+}
+
+.saved-board-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* CSS Miniature Board Preview */
+.mini-board-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: #0b0d13;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px;
+  overflow: hidden;
+  height: 100px;
+}
+
+.mini-board-row {
+  display: flex;
+  gap: 2px;
+  flex: 1;
+  min-height: 10px;
+  overflow: hidden;
+}
+
+.mini-board-label {
+  width: 14px;
+  min-width: 14px;
+  height: 100%;
+  border-radius: 2px;
+  box-shadow: inset -1px 0 2px rgba(0,0,0,0.2);
+}
+
+.mini-board-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  flex: 1;
+  overflow: hidden;
+  align-content: flex-start;
+}
+
+.mini-board-item {
+  width: 10px;
+  height: 10px;
+  background: var(--border);
+  border-radius: 1.5px;
+  background-size: cover;
+  background-position: center;
+}
+
+.saved-board-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-top: 0.25rem;
+}
+
+.saved-board-date {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.saved-board-creator {
+  font-size: 0.8rem;
+  color: var(--winner);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
 }

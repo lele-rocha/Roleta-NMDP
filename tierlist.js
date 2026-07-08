@@ -33,9 +33,16 @@
     { id: "row-f", name: "F", color: "#7fbbff", items: [] }
   ];
 
+  const SAVED_COLLECTION_KEY = "roleta-nmdp-saved-tierlists";
+
   // DOM View Containers
   const setupScreen = document.getElementById("tierlist-setup-screen");
   const editScreen = document.getElementById("tierlist-edit-screen");
+  const landingWrapper = document.getElementById("tierlist-landing-wrapper");
+  const savedBoardsList = document.getElementById("saved-boards-list");
+  const databaseErrorNotice = document.getElementById("database-error-notice");
+  const toggleSetupBtn = document.getElementById("toggle-setup-btn");
+  const setupCollapseContainer = document.getElementById("setup-collapse-container");
 
   // Setup Form Selectors
   const setupTitleInput = document.getElementById("setup-title-input");
@@ -48,14 +55,16 @@
   // DOM Edit Selectors
   const activeTierlistTitle = document.getElementById("active-tierlist-title");
   const goBackSetupBtn = document.getElementById("go-back-setup-btn");
+  const saveBoardBtn = document.getElementById("save-board-btn");
   const addRowBtn = document.getElementById("add-row-btn");
   const resetTiersBtn = document.getElementById("reset-tiers-btn");
   const clearItemsBtn = document.getElementById("clear-items-btn");
   const clearAllBtn = document.getElementById("clear-all-btn");
+  const deleteBoardBtn = document.getElementById("delete-board-btn");
   const openImportModalBtn = document.getElementById("open-import-modal-btn");
   const downloadPngBtn = document.getElementById("download-png-btn");
 
-  const dropzoneUpload = document.getElementById("tier-upload-dropzone");
+  const addStockImagesBtn = document.getElementById("add-stock-images-btn");
   const fileInputUpload = document.getElementById("tier-image-input");
 
   const boardContainer = document.getElementById("tier-list-board");
@@ -74,6 +83,7 @@
   const cancelImportBtn = document.getElementById("cancel-import-btn");
 
   // Local State variables
+  let activeBoardId = null;
   let activeEditing = false;
   let boardTitle = "Minha Tier List";
   let tiersData = [];
@@ -86,6 +96,7 @@
 
   function saveBoardState() {
     const state = {
+      activeBoardId: activeBoardId,
       activeEditing: activeEditing,
       boardTitle: boardTitle,
       tiers: [],
@@ -134,6 +145,7 @@
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
+        activeBoardId = parsed.activeBoardId || null;
         activeEditing = parsed.activeEditing || false;
         boardTitle = parsed.boardTitle || "Minha Tier List";
         tiersData = parsed.tiers || [];
@@ -534,8 +546,10 @@
     saveBoardState();
   }
 
-  // Setup drag-and-drop file upload triggers
-  dropzoneUpload.addEventListener("click", () => fileInputUpload.click());
+  // Setup drag-and-drop & clipboard paste file upload triggers
+  if (addStockImagesBtn) {
+    addStockImagesBtn.addEventListener("click", () => fileInputUpload.click());
+  }
 
   fileInputUpload.addEventListener("change", (e) => {
     if (e.target.files.length > 0) {
@@ -544,20 +558,42 @@
     }
   });
 
-  dropzoneUpload.addEventListener("dragover", (e) => {
+  bankContainer.addEventListener("dragover", (e) => {
     e.preventDefault();
-    dropzoneUpload.classList.add("drag-over");
+    bankContainer.classList.add("drag-over");
   });
 
-  dropzoneUpload.addEventListener("dragleave", () => {
-    dropzoneUpload.classList.remove("drag-over");
+  bankContainer.addEventListener("dragleave", () => {
+    bankContainer.classList.remove("drag-over");
   });
 
-  dropzoneUpload.addEventListener("drop", (e) => {
+  bankContainer.addEventListener("drop", (e) => {
     e.preventDefault();
-    dropzoneUpload.classList.remove("drag-over");
+    bankContainer.classList.remove("drag-over");
     if (e.dataTransfer.files.length > 0) {
       handleFilesUpload(e.dataTransfer.files);
+    }
+  });
+
+  // Global Clipboard Paste Event
+  window.addEventListener("paste", (e) => {
+    if (!activeEditing) return;
+
+    const items = e.clipboardData.items;
+    let foundImage = false;
+
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.indexOf("image") !== -1) {
+        const file = items[i].getAsFile();
+        if (file) {
+          foundImage = true;
+          handleFilesUpload([file]);
+        }
+      }
+    }
+
+    if (foundImage) {
+      e.preventDefault();
     }
   });
 
@@ -657,7 +693,300 @@
     });
   });
 
+  // --- Saved Board Collection Controls (Supabase Shared DB) ---
+
+  async function saveBoardToCollection() {
+    if (!supabase) {
+      alert("A conexão com o banco de dados não está configurada!");
+      return;
+    }
+
+    // 1. Gather Tiers state
+    const tiers = [];
+    document.querySelectorAll(".tier-row").forEach(row => {
+      const rowId = row.dataset.id;
+      const labelEl = row.querySelector(".tier-label");
+      const labelName = labelEl.textContent.trim();
+      const color = labelEl.dataset.color;
+
+      const items = [];
+      row.querySelectorAll(".tier-item-img").forEach(img => {
+        items.push({
+          id: img.dataset.id,
+          src: img.src,
+          title: img.title || ""
+        });
+      });
+
+      tiers.push({
+        id: rowId,
+        name: labelName,
+        color: color,
+        items: items
+      });
+    });
+
+    // 2. Gather Bank state
+    const bank = [];
+    document.querySelectorAll("#unplaced-images-bank .tier-item-img").forEach(img => {
+      bank.push({
+        id: img.dataset.id,
+        src: img.src,
+        title: img.title || ""
+      });
+    });
+
+    // 3. Ensure Board ID is active
+    if (!activeBoardId) {
+      activeBoardId = "tl-" + Date.now().toString(36) + "-" + Math.random().toString(36).substr(2, 5);
+    }
+
+    // 4. Save to Supabase
+    saveBoardBtn.disabled = true;
+    saveBoardBtn.textContent = "Salvando...";
+
+    const userName = localStorage.getItem("roleta-nmdp-session") || "Anônimo";
+
+    try {
+      const { error } = await supabase.from("tier_lists").upsert({
+        id: activeBoardId,
+        title: boardTitle,
+        created_by: userName,
+        tiers: tiers,
+        bank: bank,
+        updated_at: new Date().toISOString()
+      });
+
+      if (error) throw error;
+
+      saveBoardState();
+      alert("Tabuleiro salvo na nuvem com sucesso!");
+      renderSavedBoards();
+      
+      // Make delete board button visible since it is now saved
+      deleteBoardBtn.style.display = "inline-block";
+    } catch (err) {
+      console.error(err);
+      if (err.code === "PGRST205" || err.status === 404) {
+        alert("Erro: A tabela 'tier_lists' não existe no Supabase. Crie-a no painel do Supabase conforme as instruções do menu.");
+      } else {
+        alert("Erro ao salvar tabuleiro no banco de dados.");
+      }
+    } finally {
+      saveBoardBtn.disabled = false;
+      saveBoardBtn.textContent = "💾 Salvar Tabuleiro";
+    }
+  }
+
+  async function renderSavedBoards() {
+    if (!savedBoardsList) return;
+    savedBoardsList.innerHTML = "";
+    databaseErrorNotice.hidden = true;
+    databaseErrorNotice.innerHTML = "";
+
+    if (!supabase) {
+      savedBoardsList.innerHTML = `<p style="color: var(--text-muted); text-align: center; padding: 2rem 0; width:100%;">Supabase não configurado.</p>`;
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from("tier_lists")
+        .select("*")
+        .order("updated_at", { ascending: false });
+
+      if (error) throw error;
+
+      if (!data || data.length === 0) {
+        savedBoardsList.innerHTML = `
+          <p class="empty-saved-msg" style="color: var(--text-muted); font-size: 0.95rem; text-align: center; padding: 2rem 0; width: 100%;">
+            Nenhum tabuleiro salvo ainda. Crie um acima!
+          </p>
+        `;
+        return;
+      }
+
+      data.forEach(board => {
+        const card = document.createElement("div");
+        card.className = "saved-board-card";
+
+        // 1. Board Title
+        const titleEl = document.createElement("h3");
+        titleEl.className = "saved-board-title";
+        titleEl.textContent = board.title || "Sem Título";
+        card.appendChild(titleEl);
+
+        // 2. Mini CSS preview of layout
+        const previewEl = document.createElement("div");
+        previewEl.className = "mini-board-preview";
+
+        const tiers = board.tiers || [];
+        tiers.forEach(tier => {
+          const rowEl = document.createElement("div");
+          rowEl.className = "mini-board-row";
+
+          const labelEl = document.createElement("div");
+          labelEl.className = "mini-board-label";
+          labelEl.style.backgroundColor = tier.color || "#7fbbff";
+          rowEl.appendChild(labelEl);
+
+          const itemsEl = document.createElement("div");
+          itemsEl.className = "mini-board-items";
+
+          const items = tier.items || [];
+          items.forEach(item => {
+            const itemEl = document.createElement("div");
+            itemEl.className = "mini-board-item";
+            if (item.src) {
+              itemEl.style.backgroundImage = `url(${item.src})`;
+            }
+            itemsEl.appendChild(itemEl);
+          });
+
+          rowEl.appendChild(itemsEl);
+          previewEl.appendChild(rowEl);
+        });
+
+        card.appendChild(previewEl);
+
+        // 3. Metadata footer
+        const footerEl = document.createElement("div");
+        footerEl.className = "saved-board-meta";
+
+        // Creator badge
+        const creatorEl = document.createElement("span");
+        creatorEl.className = "saved-board-creator";
+        creatorEl.innerHTML = `👤 Criado por: <strong>${board.created_by || "Anônimo"}</strong>`;
+        footerEl.appendChild(creatorEl);
+
+        const dateEl = document.createElement("span");
+        dateEl.className = "saved-board-date";
+        const dateObj = new Date(board.updated_at || Date.now());
+        dateEl.textContent = `Atualizado: ${dateObj.toLocaleDateString("pt-BR")} ${dateObj.toLocaleTimeString("pt-BR", { hour: '2-digit', minute: '2-digit' })}`;
+        footerEl.appendChild(dateEl);
+
+        card.appendChild(footerEl);
+
+        // Click event on whole card to edit/load
+        card.addEventListener("click", () => {
+          activeBoardId = board.id;
+          boardTitle = board.title;
+          tiersData = JSON.parse(JSON.stringify(board.tiers));
+          bankData = JSON.parse(JSON.stringify(board.bank));
+          activeEditing = true;
+
+          saveBoardState();
+
+          // Switch to editor
+          activeTierlistTitle.textContent = boardTitle;
+          renderBoard();
+          renderBank();
+
+          landingWrapper.style.display = "none";
+          editScreen.style.display = "flex";
+
+          // Show delete board button since it is a saved board
+          deleteBoardBtn.style.display = "inline-block";
+        });
+
+        savedBoardsList.appendChild(card);
+      });
+    } catch (err) {
+      console.error(err);
+      if (err.code === "PGRST205" || err.status === 404) {
+        // Table does not exist in schema cache - render schema instructions
+        showDatabaseErrorInstructions();
+      } else {
+        savedBoardsList.innerHTML = `<p style="color: #ff7675; text-align: center; padding: 2rem 0; width:100%;">Erro ao carregar os tabuleiros do Supabase.</p>`;
+      }
+    }
+  }
+
+  function showDatabaseErrorInstructions() {
+    databaseErrorNotice.hidden = false;
+    databaseErrorNotice.innerHTML = `
+      <div class="supabase-notice-box" style="background: rgba(235, 77, 75, 0.1); border: 1px dashed #eb4d4b; padding: 1rem; border-radius: 8px; margin-top: 1rem; text-align: left; animation: fade-in 0.3s ease;">
+        <p style="color: #ff7675; font-size: 0.9rem; font-weight: bold; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.35rem;">
+          ⚠️ Tabela "tier_lists" não encontrada no Supabase!
+        </p>
+        <p style="color: var(--text-muted); font-size: 0.8rem; line-height: 1.4; margin-bottom: 0.75rem;">
+          Para salvar e compartilhar os tabuleiros entre todos os usuários, execute o comando SQL abaixo no <strong>SQL Editor</strong> do painel do seu Supabase:
+        </p>
+        <pre style="background: #000; color: #74b9ff; padding: 0.75rem; border-radius: 6px; font-size: 0.75rem; overflow-x: auto; font-family: monospace; white-space: pre-wrap; word-break: break-all; max-height: 150px; border: 1px solid var(--border);">CREATE TABLE public.tier_lists (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    tiers JSONB NOT NULL,
+    bank JSONB NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE public.tier_lists ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow select" ON public.tier_lists FOR SELECT USING (true);
+CREATE POLICY "Allow insert" ON public.tier_lists FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow update" ON public.tier_lists FOR UPDATE USING (true);
+CREATE POLICY "Allow delete" ON public.tier_lists FOR DELETE USING (true);</pre>
+        <p style="color: var(--text-muted); font-size: 0.75rem; margin-top: 0.5rem; text-align: center;">
+          Após executar no painel, recarregue esta página!
+        </p>
+      </div>
+    `;
+  }
+
+  saveBoardBtn.addEventListener("click", () => {
+    saveBoardToCollection();
+  });
+
+  deleteBoardBtn.addEventListener("click", async () => {
+    if (!activeBoardId) return;
+    const confirmDelete = confirm(`Deseja excluir permanentemente o tabuleiro "${boardTitle}"?`);
+    if (!confirmDelete) return;
+
+    deleteBoardBtn.disabled = true;
+    deleteBoardBtn.textContent = "Excluindo...";
+
+    try {
+      const { error } = await supabase
+        .from("tier_lists")
+        .delete()
+        .eq("id", activeBoardId);
+
+      if (error) throw error;
+
+      // Reset editor session
+      activeBoardId = null;
+      activeEditing = false;
+      boardTitle = "Minha Tier List";
+      tiersData = JSON.parse(JSON.stringify(DEFAULT_TIERS));
+      bankData = [];
+      saveBoardState();
+
+      // Go back to setup screen
+      editScreen.style.display = "none";
+      landingWrapper.style.display = "flex";
+      renderSavedBoards();
+      
+      // Close collapse form
+      setupCollapseContainer.classList.remove("expanded");
+      toggleSetupBtn.innerHTML = "<span>➕ Criar Novo Tabuleiro</span>";
+    } catch (err) {
+      console.error(err);
+      alert("Erro ao excluir o tabuleiro do banco de dados.");
+    } finally {
+      deleteBoardBtn.disabled = false;
+      deleteBoardBtn.textContent = "🗑️ Excluir Tabuleiro";
+    }
+  });
+
   // --- Setup Landing Screen Events ---
+
+  toggleSetupBtn.addEventListener("click", () => {
+    setupCollapseContainer.classList.toggle("expanded");
+    const isExpanded = setupCollapseContainer.classList.contains("expanded");
+    toggleSetupBtn.innerHTML = isExpanded 
+      ? "<span>➖ Recolher Criador</span>" 
+      : "<span>➕ Criar Novo Tabuleiro</span>";
+  });
 
   setupImportCheckbox.addEventListener("change", () => {
     setupImportOptions.style.display = setupImportCheckbox.checked ? "flex" : "none";
@@ -666,6 +995,10 @@
   startCreationBtn.addEventListener("click", async () => {
     boardTitle = setupTitleInput.value.trim() || "Minha Tier List";
     activeTierlistTitle.textContent = boardTitle;
+
+    // A fresh board creation reset
+    activeBoardId = null;
+    deleteBoardBtn.style.display = "none";
 
     // Template selection
     const templateVal = document.querySelector('input[name="setup-template"]:checked').value;
@@ -722,15 +1055,16 @@
     saveBoardState();
 
     // Toggle views
-    setupScreen.style.display = "none";
+    landingWrapper.style.display = "none";
     editScreen.style.display = "flex";
   });
 
   goBackSetupBtn.addEventListener("click", () => {
-    const confirmNew = confirm("Deseja criar um novo tabuleiro? O tabuleiro atual será descartado!");
+    const confirmNew = confirm("Deseja voltar ao menu? Lembre-se de salvar suas alterações!");
     if (!confirmNew) return;
 
     activeEditing = false;
+    activeBoardId = null;
     boardTitle = "Minha Tier List";
     tiersData = JSON.parse(JSON.stringify(DEFAULT_TIERS));
     bankData = [];
@@ -739,12 +1073,17 @@
 
     // Toggle screens
     editScreen.style.display = "none";
-    setupScreen.style.display = "block";
+    landingWrapper.style.display = "flex";
+    renderSavedBoards();
 
     // Reset setup inputs
     setupTitleInput.value = "Minha Tier List";
     setupImportCheckbox.checked = false;
     setupImportOptions.style.display = "none";
+    
+    // Reset collapse state
+    setupCollapseContainer.classList.remove("expanded");
+    toggleSetupBtn.innerHTML = "<span>➕ Criar Novo Tabuleiro</span>";
   });
 
   // --- Initialization ---
@@ -753,14 +1092,21 @@
     loadBoardState();
     
     if (activeEditing) {
-      setupScreen.style.display = "none";
+      landingWrapper.style.display = "none";
       editScreen.style.display = "flex";
       activeTierlistTitle.textContent = boardTitle;
       renderBoard();
       renderBank();
+      
+      if (activeBoardId) {
+        deleteBoardBtn.style.display = "inline-block";
+      } else {
+        deleteBoardBtn.style.display = "none";
+      }
     } else {
-      setupScreen.style.display = "block";
+      landingWrapper.style.display = "flex";
       editScreen.style.display = "none";
+      renderSavedBoards();
     }
 
     setupDropzoneEvents(bankContainer);
