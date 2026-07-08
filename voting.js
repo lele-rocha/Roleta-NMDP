@@ -135,15 +135,23 @@
       if (user) {
         if (currentCategory === "anime") {
           categoryVotes = user.votedCardIds.filter(id => id.startsWith("anime_")).length;
+        } else if (currentCategory === "filmes") {
+          categoryVotes = user.votedCardIds.filter(id => id.startsWith("filmes_")).length;
         } else {
-          categoryVotes = user.votedCardIds.filter(id => !id.startsWith("anime_")).length;
+          categoryVotes = user.votedCardIds.filter(id => !id.startsWith("anime_") && !id.startsWith("filmes_")).length;
         }
       }
       activeUserVotes.textContent = categoryVotes;
 
       const categoryLabelEl = document.getElementById("active-user-votes-category");
       if (categoryLabelEl) {
-        categoryLabelEl.textContent = currentCategory === "anime" ? "Anime" : "Games";
+        if (currentCategory === "anime") {
+          categoryLabelEl.textContent = "Anime";
+        } else if (currentCategory === "filmes") {
+          categoryLabelEl.textContent = "Filmes";
+        } else {
+          categoryLabelEl.textContent = "Games";
+        }
       }
     } else {
       userLoginForm.style.display = "flex";
@@ -166,8 +174,9 @@
     const isAdmin = currentUsername && currentUsername.toLowerCase() === "lele";
 
     sortedUsers.forEach((user) => {
-      const gamesCount = user.votedCardIds.filter(id => !id.startsWith("anime_")).length;
+      const gamesCount = user.votedCardIds.filter(id => !id.startsWith("anime_") && !id.startsWith("filmes_")).length;
       const animeCount = user.votedCardIds.filter(id => id.startsWith("anime_")).length;
+      const filmesCount = user.votedCardIds.filter(id => id.startsWith("filmes_")).length;
       
       const el = document.createElement("div");
       el.className = "user-status-card";
@@ -183,7 +192,7 @@
         ${deleteBtnHtml}
         <span class="user-status-card__name">${escapeHtml(user.name)}</span>
         <span class="user-status-card__votes" style="font-size: 0.75rem;">
-          Games: <strong>${gamesCount}</strong>/20 | Anime: <strong>${animeCount}</strong>/20
+          Games: <strong>${gamesCount}</strong>/20 | Anime: <strong>${animeCount}</strong>/20 | Filmes: <strong>${filmesCount}</strong>/20
         </span>
       `;
       usersListContainer.appendChild(el);
@@ -346,8 +355,10 @@
     const categoryCards = cards.filter(c => {
       if (currentCategory === "anime") {
         return c.id.startsWith("anime_");
+      } else if (currentCategory === "filmes") {
+        return c.id.startsWith("filmes_");
       } else {
-        return !c.id.startsWith("anime_");
+        return !c.id.startsWith("anime_") && !c.id.startsWith("filmes_");
       }
     });
 
@@ -363,9 +374,13 @@
 
     if (sorted.length === 0) {
       cardsEmptyMsg.hidden = false;
-      cardsEmptyMsg.textContent = currentCategory === "anime"
-        ? "Nenhum anime adicionado ainda. Crie o primeiro acima!"
-        : "Nenhum card adicionado ainda. Crie o primeiro acima!";
+      if (currentCategory === "anime") {
+        cardsEmptyMsg.textContent = "Nenhum anime adicionado ainda. Crie o primeiro acima!";
+      } else if (currentCategory === "filmes") {
+        cardsEmptyMsg.textContent = "Nenhum filme adicionado ainda. Crie o primeiro acima!";
+      } else {
+        cardsEmptyMsg.textContent = "Nenhum card adicionado ainda. Crie o primeiro acima!";
+      }
       return;
     }
     cardsEmptyMsg.hidden = true;
@@ -462,13 +477,18 @@
         const categoryVotesCount = user.votedCardIds.filter(id => {
           if (currentCategory === "anime") {
             return id.startsWith("anime_");
+          } else if (currentCategory === "filmes") {
+            return id.startsWith("filmes_");
           } else {
-            return !id.startsWith("anime_");
+            return !id.startsWith("anime_") && !id.startsWith("filmes_");
           }
         }).length;
 
         if (categoryVotesCount >= 20) {
-          alert(`Você já esgotou seu limite de 20 votos para a categoria ${currentCategory === "anime" ? "Anime" : "Games"}!`);
+          let categoryName = "Games";
+          if (currentCategory === "anime") categoryName = "Anime";
+          if (currentCategory === "filmes") categoryName = "Filmes";
+          alert(`Você já esgotou seu limite de 20 votos para a categoria ${categoryName}!`);
           return;
         }
 
@@ -793,7 +813,12 @@
 
     const description = cardDescInput.value.trim();
 
-    const generatedId = currentCategory === "anime" ? `anime_${generateId()}` : generateId();
+    let generatedId = generateId();
+    if (currentCategory === "anime") {
+      generatedId = `anime_${generatedId}`;
+    } else if (currentCategory === "filmes") {
+      generatedId = `filmes_${generatedId}`;
+    }
 
     const newCard = {
       id: generatedId,
@@ -1175,9 +1200,13 @@
       currentCategory = tab.dataset.category;
 
       // Update form badge
-      if (activeCategoryFormBadge) {
-        activeCategoryFormBadge.textContent = currentCategory === "anime" ? "Anime" : "Games";
-      }
+        if (currentCategory === "anime") {
+          activeCategoryFormBadge.textContent = "Anime";
+        } else if (currentCategory === "filmes") {
+          activeCategoryFormBadge.textContent = "Filmes";
+        } else {
+          activeCategoryFormBadge.textContent = "Games";
+        }
 
       // Re-render and update UI
       updateUserBar();

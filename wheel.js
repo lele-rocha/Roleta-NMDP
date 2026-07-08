@@ -739,14 +739,17 @@
         const filteredData = data.filter(c => {
           if (category === "anime") {
             return c.id.startsWith("anime_");
+          } else if (category === "filmes") {
+            return c.id.startsWith("filmes_");
           } else if (category === "games") {
-            return !c.id.startsWith("anime_");
+            return !c.id.startsWith("anime_") && !c.id.startsWith("filmes_");
           }
           return true; // "all"
         });
 
         if (filteredData.length === 0) {
-          alert(`Nenhum card com 1 ou mais votos encontrado para a categoria selecionada (${category === "anime" ? "Anime" : category === "games" ? "Games" : "Todos"})!`);
+          const catName = category === "anime" ? "Anime" : category === "filmes" ? "Filmes" : category === "games" ? "Games" : "Todos";
+          alert(`Nenhum card com 1 ou mais votos encontrado para a categoria selecionada (${catName})!`);
           return;
         }
 

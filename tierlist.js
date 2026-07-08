@@ -690,8 +690,9 @@
         if (!card.image_data_url) return;
 
         // 1. Filter Category
-        if (category === "games" && card.id.startsWith("anime_")) return;
+        if (category === "games" && (card.id.startsWith("anime_") || card.id.startsWith("filmes_"))) return;
         if (category === "anime" && !card.id.startsWith("anime_")) return;
+        if (category === "filmes" && !card.id.startsWith("filmes_")) return;
 
         // Check if already imported
         const exists = [...document.querySelectorAll(".tier-item-img")].some(
@@ -724,6 +725,7 @@
 
   document.getElementById("import-games-choice-btn").addEventListener("click", () => executeImport("games"));
   document.getElementById("import-anime-choice-btn").addEventListener("click", () => executeImport("anime"));
+  document.getElementById("import-filmes-choice-btn").addEventListener("click", () => executeImport("filmes"));
   document.getElementById("import-all-choice-btn").addEventListener("click", () => executeImport("all"));
 
   // --- Save as PNG using html2canvas ---
@@ -1143,8 +1145,9 @@ CREATE POLICY "Allow delete" ON public.tier_lists FOR DELETE USING (true);</pre>
         if (data && data.length > 0) {
           data.forEach(card => {
             if (!card.image_data_url) return;
-            if (category === "games" && card.id.startsWith("anime_")) return;
+            if (category === "games" && (card.id.startsWith("anime_") || card.id.startsWith("filmes_"))) return;
             if (category === "anime" && !card.id.startsWith("anime_")) return;
+            if (category === "filmes" && !card.id.startsWith("filmes_")) return;
             if (votesFilter === "voted" && (!card.votes || card.votes < 1)) return;
 
             bankData.push({
