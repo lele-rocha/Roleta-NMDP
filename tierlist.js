@@ -765,6 +765,7 @@
 
     // 1. Gather Tiers state
     const tiers = [];
+    const row_metadata = [];
     document.querySelectorAll(".tier-row").forEach(row => {
       const rowId = row.dataset.id;
       const labelEl = row.querySelector(".tier-label");
@@ -785,6 +786,12 @@
         name: labelName,
         color: color,
         items: items
+      });
+
+      row_metadata.push({
+        name: labelName,
+        color: color,
+        count: items.length
       });
     });
 
@@ -816,6 +823,7 @@
         created_by: userName,
         tiers: tiers,
         bank: bank,
+        row_metadata: row_metadata,
         updated_at: new Date().toISOString()
       });
 
@@ -860,10 +868,10 @@
     }
 
     try {
-      // 2. Query only metadata columns to ensure instant speed
+      // 2. Query lightweight columns (select tiers but exclude the heavy bank column)
       const { data, error } = await supabase
         .from("tier_lists")
-        .select("id, title, created_by, updated_at")
+        .select("id, title, created_by, updated_at, tiers")
         .order("updated_at", { ascending: false });
 
       if (error) throw error;
@@ -890,37 +898,41 @@
         titleEl.textContent = board.title || "Sem Título";
         card.appendChild(titleEl);
 
-        // 2. Mini CSS preview of layout (Generic, fast-loading placeholder visual)
+        // 2. Mini CSS preview of layout (Actual board tiers with item image backgrounds)
         const previewEl = document.createElement("div");
         previewEl.className = "mini-board-preview";
 
-        const placeholderTiers = [
-          { color: "#ff7f7f", count: 2 },
-          { color: "#ffbf7f", count: 3 },
-          { color: "#ffdf7f", count: 1 },
-          { color: "#ffff7f", count: 2 },
-          { color: "#7fff7f", count: 0 },
-          { color: "#7fbbff", count: 1 }
-        ];
+        const tiers = board.tiers || [];
 
-        placeholderTiers.forEach(tier => {
+        tiers.forEach(tier => {
           const rowEl = document.createElement("div");
           rowEl.className = "mini-board-row";
 
           const labelEl = document.createElement("div");
           labelEl.className = "mini-board-label";
-          labelEl.style.backgroundColor = tier.color;
+          labelEl.style.backgroundColor = tier.color || "#95a5a6";
+          labelEl.textContent = (tier.name || "").substring(0, 2);
+          labelEl.style.color = "#0f1117";
+          labelEl.style.fontSize = "0.55rem";
+          labelEl.style.fontWeight = "800";
+          labelEl.style.display = "flex";
+          labelEl.style.alignItems = "center";
+          labelEl.style.justifyContent = "center";
+          labelEl.style.textShadow = "0px 0px 1px rgba(255,255,255,0.4)";
           rowEl.appendChild(labelEl);
 
           const itemsEl = document.createElement("div");
           itemsEl.className = "mini-board-items";
 
-          for (let i = 0; i < tier.count; i++) {
+          const items = tier.items || [];
+          items.forEach(item => {
             const itemEl = document.createElement("div");
             itemEl.className = "mini-board-item";
-            itemEl.style.background = "rgba(255, 255, 255, 0.15)";
+            if (item.src) {
+              itemEl.style.backgroundImage = `url(${item.src})`;
+            }
             itemsEl.appendChild(itemEl);
-          }
+          });
 
           rowEl.appendChild(itemsEl);
           previewEl.appendChild(rowEl);
@@ -1019,8 +1031,10 @@
         <pre style="background: #000; color: #74b9ff; padding: 0.75rem; border-radius: 6px; font-size: 0.75rem; overflow-x: auto; font-family: monospace; white-space: pre-wrap; word-break: break-all; max-height: 150px; border: 1px solid var(--border);">CREATE TABLE public.tier_lists (
     id TEXT PRIMARY KEY,
     title TEXT NOT NULL,
+    created_by TEXT,
     tiers JSONB NOT NULL,
     bank JSONB NOT NULL,
+    row_metadata JSONB,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
