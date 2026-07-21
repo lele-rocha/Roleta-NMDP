@@ -2233,3 +2233,56 @@ select {
   opacity: 0.85;
   margin-top: 0.35rem;
 }
+
+/* --- Star Rating & Hover Readout Styling --- */
+.star-btn {
+  user-select: none;
+  cursor: pointer;
+  filter: grayscale(0.8) opacity(0.4);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.star-btn:hover,
+.star-btn.active {
+  filter: grayscale(0) opacity(1);
+  transform: scale(1.25);
+  text-shadow: 0 0 12px rgba(255, 215, 0, 0.8);
+}
+
+.hover-rating-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.15rem 0.35rem;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 4px;
+}
+
+/* --- Unvoted Item Visual Warning Indicator --- */
+.unvoted-warning-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  background: rgba(255, 177, 66, 0.95);
+  color: #000;
+  font-size: 0.65rem;
+  font-weight: 800;
+  padding: 0.1rem 0.25rem;
+  border-radius: 6px;
+  box-shadow: 0 0 8px rgba(255, 177, 66, 0.8);
+  pointer-events: none;
+  z-index: 10;
+  animation: pulseWarning 2s infinite ease-in-out;
+  line-height: 1;
+}
+
+@keyframes pulseWarning {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 0 6px rgba(255, 177, 66, 0.6);
+  }
+  50% {
+    transform: scale(1.15);
+    box-shadow: 0 0 12px rgba(255, 177, 66, 1);
+  }
+}

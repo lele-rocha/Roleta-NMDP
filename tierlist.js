@@ -258,17 +258,262 @@
     return row;
   }
 
+  // --- Featured Ratings & Auto Re-Sorting System ---
+  let activeBoardRatings = {}; // itemId -> Array of { userName, score }
+  let activeRatingItem = null;
+
+  const inlineRatingCard = document.getElementById("inline-rating-card");
+  const inlineRatingItemTitle = document.getElementById("inline-rating-item-title");
+  const inlineRatingSlider = document.getElementById("inline-rating-slider");
+  const inlineRatingValue = document.getElementById("inline-rating-value");
+  const submitInlineRatingBtn = document.getElementById("submit-inline-rating-btn");
+  const closeInlineRatingBtn = document.getElementById("close-inline-rating-btn");
+
+  const imageHoverPreviewRatingBox = document.getElementById("image-hover-preview-rating-box");
+  const hoverAvgRating = document.getElementById("hover-avg-rating");
+  const hoverUserRatingsList = document.getElementById("hover-user-ratings-list");
+
+  if (inlineRatingSlider && inlineRatingValue) {
+    inlineRatingSlider.addEventListener("input", () => {
+      inlineRatingValue.textContent = `${Number(inlineRatingSlider.value).toFixed(1)} / 10`;
+    });
+  }
+
+  function getItemRatingStats(itemId) {
+    if (!itemId) return { avg: 0, count: 0, ratings: [] };
+    const ratings = activeBoardRatings[itemId] || [];
+    if (ratings.length === 0) {
+      return { avg: 0, count: 0, ratings: [] };
+    }
+    const sum = ratings.reduce((acc, r) => acc + r.score, 0);
+    const avg = Math.round((sum / ratings.length) * 10) / 10;
+    return { avg, count: ratings.length, ratings };
+  }
+
+  async function loadFeaturedBoardRatings(boardId) {
+    activeBoardRatings = {};
+    if (!supabase || !boardId) return;
+
+    try {
+      const { data, error } = await supabase
+        .from("featured_ratings")
+        .select("*")
+        .eq("board_id", boardId);
+
+      if (!error && data) {
+        data.forEach(r => {
+          if (!activeBoardRatings[r.item_id]) activeBoardRatings[r.item_id] = [];
+          activeBoardRatings[r.item_id].push({
+            userName: r.user_name,
+            score: Number(r.score)
+          });
+        });
+      }
+    } catch (err) {
+      console.warn("Tabela 'featured_ratings' não disponível ou vazia:", err);
+    }
+  }
+
+  async function submitItemRating(itemId, score) {
+    if (!activeBoardId || !itemId) return;
+
+    const sessionUser = localStorage.getItem("roleta-nmdp-session") || "Anônimo";
+    const recordId = `rate-${activeBoardId}-${itemId}-${sessionUser.toLowerCase().replace(/\s+/g, '_')}`;
+
+    // 1. Update local state
+    if (!activeBoardRatings[itemId]) activeBoardRatings[itemId] = [];
+    const existingIdx = activeBoardRatings[itemId].findIndex(r => r.userName.toLowerCase() === sessionUser.toLowerCase());
+    if (existingIdx >= 0) {
+      activeBoardRatings[itemId][existingIdx].score = score;
+    } else {
+      activeBoardRatings[itemId].push({ userName: sessionUser, score });
+    }
+
+    // 2. Auto re-sort board items across rows and within rows based on average scores (0-10 scale)
+    applyFeaturedAutoSorting();
+    saveBoardState();
+
+    // 3. Save to Supabase featured_ratings table
+    if (supabase) {
+      try {
+        await supabase.from("featured_ratings").upsert({
+          id: recordId,
+          board_id: activeBoardId,
+          item_id: itemId,
+          user_name: sessionUser,
+          score: score,
+          updated_at: new Date().toISOString()
+        });
+      } catch (err) {
+        console.warn("Erro ao salvar nota em featured_ratings:", err);
+      }
+
+      // Save updated board state to Supabase
+      saveBoardToCollection();
+    }
+  }
+
+  function applyFeaturedAutoSorting() {
+    // Collect all placed items
+    const allPlacedItems = [];
+    tiersData.forEach(tier => {
+      if (Array.isArray(tier.items)) {
+        allPlacedItems.push(...tier.items);
+      }
+    });
+
+    if (allPlacedItems.length === 0) return;
+
+    // Clear items from tiers
+    tiersData.forEach(tier => {
+      tier.items = [];
+    });
+
+    const numRows = tiersData.length;
+
+    // Distribute items into tier rows based on 0-10 average rating thresholds
+    allPlacedItems.forEach(item => {
+      const stats = getItemRatingStats(item.id);
+      let targetRowIndex = numRows - 1; // Default to lowest tier
+
+      if (stats.count > 0) {
+        if (stats.avg >= 9.0) targetRowIndex = 0;
+        else if (stats.avg >= 7.5) targetRowIndex = Math.min(1, numRows - 1);
+        else if (stats.avg >= 5.5) targetRowIndex = Math.min(2, numRows - 1);
+        else if (stats.avg >= 3.5) targetRowIndex = Math.min(3, numRows - 1);
+        else targetRowIndex = numRows - 1;
+      }
+
+      if (tiersData[targetRowIndex]) {
+        tiersData[targetRowIndex].items.push(item);
+      }
+    });
+
+    // Sort items inside each tier row descending by average score
+    tiersData.forEach(tier => {
+      tier.items.sort((a, b) => {
+        const statsA = getItemRatingStats(a.id);
+        const statsB = getItemRatingStats(b.id);
+        if (statsB.avg !== statsA.avg) {
+          return statsB.avg - statsA.avg;
+        }
+        return statsB.count - statsA.count;
+      });
+    });
+
+    renderBoard();
+  }
+
+  function openInlineRatingCard(item, targetImgElement) {
+    if (!item || !inlineRatingCard) return;
+    activeRatingItem = item;
+
+    if (inlineRatingItemTitle) {
+      inlineRatingItemTitle.textContent = item.title || "Item sem título";
+    }
+
+    const sessionUser = localStorage.getItem("roleta-nmdp-session") || "Anônimo";
+    const ratings = activeBoardRatings[item.id] || [];
+    const myRatingObj = ratings.find(r => r.userName.toLowerCase() === sessionUser.toLowerCase());
+    const myCurrentScore = myRatingObj ? myRatingObj.score : 5.0;
+
+    if (inlineRatingSlider) {
+      inlineRatingSlider.value = myCurrentScore;
+    }
+    if (inlineRatingValue) {
+      inlineRatingValue.textContent = `${Number(myCurrentScore).toFixed(1)} / 10`;
+    }
+
+    // Calculate position relative to targetImgElement
+    if (targetImgElement) {
+      const rect = targetImgElement.getBoundingClientRect();
+      const cardWidth = 260;
+      
+      let left = window.scrollX + rect.left + (rect.width / 2) - (cardWidth / 2);
+      let top = window.scrollY + rect.bottom + 8;
+
+      // Ensure card stays within viewport
+      if (left < 10) left = 10;
+      if (left + cardWidth > window.innerWidth - 20) {
+        left = window.innerWidth - cardWidth - 20;
+      }
+
+      inlineRatingCard.style.left = `${left}px`;
+      inlineRatingCard.style.top = `${top}px`;
+    }
+
+    inlineRatingCard.style.display = "flex";
+  }
+
+  function closeInlineRatingCard() {
+    if (inlineRatingCard) {
+      inlineRatingCard.style.display = "none";
+    }
+  }
+
+  if (closeInlineRatingBtn) {
+    closeInlineRatingBtn.addEventListener("click", closeInlineRatingCard);
+  }
+
+  if (submitInlineRatingBtn) {
+    submitInlineRatingBtn.addEventListener("click", async () => {
+      if (activeRatingItem && inlineRatingSlider) {
+        const score = Number(inlineRatingSlider.value);
+        closeInlineRatingCard();
+        await submitItemRating(activeRatingItem.id, score);
+      }
+    });
+  }
+
+  // Close rating popover on click outside
+  window.addEventListener("click", (e) => {
+    if (inlineRatingCard && inlineRatingCard.style.display !== "none") {
+      if (!inlineRatingCard.contains(e.target) && !e.target.classList.contains("tier-item-img")) {
+        closeInlineRatingCard();
+      }
+    }
+  });
+
   function createItemElement(item) {
+    const wrapper = document.createElement("div");
+    wrapper.className = "tier-item-wrapper";
+    wrapper.style.position = "relative";
+    wrapper.style.display = "inline-flex";
+    wrapper.style.alignItems = "center";
+    wrapper.style.justifyContent = "center";
+
     const img = document.createElement("img");
     img.className = "tier-item-img";
     img.src = item.src;
-    img.dataset.id = item.id;
+    img.dataset.id = item.id || ("item-" + Date.now().toString(36) + "-" + Math.random().toString(36).substr(2, 5));
     img.title = item.title || "";
     img.draggable = true;
 
-    setupDragEvents(img);
+    setupDragEvents(wrapper);
     setupHoverPreview(img);
-    return img;
+
+    // Check if current session user has voted on this item
+    const sessionUser = (localStorage.getItem("roleta-nmdp-session") || "Anônimo").toLowerCase();
+    const itemRatings = activeBoardRatings[item.id] || [];
+    const hasVoted = itemRatings.some(r => (r.userName || "").toLowerCase() === sessionUser);
+
+    if (!hasVoted) {
+      const badge = document.createElement("span");
+      badge.className = "unvoted-warning-badge";
+      badge.title = "Você ainda não avaliou este item!";
+      badge.textContent = "⚠️";
+      wrapper.appendChild(badge);
+    }
+
+    wrapper.appendChild(img);
+
+    // Click on item inside tier list row opens Floating Inline Rating Card Popover
+    img.addEventListener("click", (e) => {
+      e.stopPropagation();
+      openInlineRatingCard(item, img);
+    });
+
+    return wrapper;
   }
 
   // --- Drag and Drop Logic ---
@@ -304,6 +549,26 @@
       if (previewImg && previewTitle && previewPopup) {
         previewImg.src = el.src;
         previewTitle.textContent = el.title || "Sem Título";
+
+        // Display Ratings Readout & User Breakdown List (0-10 Scale)
+        const itemId = el.dataset.id;
+        const stats = getItemRatingStats(itemId);
+
+        if (imageHoverPreviewRatingBox && hoverAvgRating && hoverUserRatingsList) {
+          imageHoverPreviewRatingBox.style.display = "block";
+          if (stats.count > 0) {
+            hoverAvgRating.innerHTML = `⭐ Média: <strong>${stats.avg} / 10</strong> (${stats.count} ${stats.count === 1 ? 'voto' : 'votos'})`;
+            hoverUserRatingsList.innerHTML = stats.ratings.map(r => `
+              <div class="hover-rating-item">
+                <span>👤 <strong>${r.userName}</strong></span>
+                <span style="color:#ffd700; font-weight:bold;">⭐ ${r.score}/10</span>
+              </div>
+            `).join("");
+          } else {
+            hoverAvgRating.innerHTML = `⭐ <em>Sem avaliações ainda</em>`;
+            hoverUserRatingsList.innerHTML = `<span style="text-align:center; font-style:italic; font-size: 0.7rem;">Clique no item para dar sua nota!</span>`;
+          }
+        }
 
         // Position popup near cursor
         previewPopup.style.display = "block";
@@ -1237,6 +1502,11 @@
             tiersData = JSON.parse(JSON.stringify(details.tiers || []));
             bankData = JSON.parse(JSON.stringify(details.bank || []));
             activeEditing = true;
+
+            await loadFeaturedBoardRatings(board.id);
+            if (isFeaturedCard) {
+              applyFeaturedAutoSorting();
+            }
 
             activeTierlistTitle.textContent = boardTitle;
             renderBoard();
