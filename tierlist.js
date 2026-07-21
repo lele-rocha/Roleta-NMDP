@@ -757,6 +757,43 @@
     });
   });
 
+  // Helper to compress image data URLs for database saving
+  function compressImageDataUrl(src, maxDim = 250, quality = 0.8) {
+    if (!src || !src.startsWith("data:image/") || src.length < 50000) {
+      return Promise.resolve(src);
+    }
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d");
+
+        let width = img.width;
+        let height = img.height;
+        if (width > height) {
+          if (width > maxDim) {
+            height = Math.round(height * (maxDim / width));
+            width = maxDim;
+          }
+        } else {
+          if (height > maxDim) {
+            width = Math.round(width * (maxDim / height));
+            height = maxDim;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        ctx.drawImage(img, 0, 0, width, height);
+
+        const compressed = canvas.toDataURL("image/webp", quality);
+        resolve(compressed.length < src.length ? compressed : src);
+      };
+      img.onerror = () => resolve(src);
+      img.src = src;
+    });
+  }
+
   // --- Saved Board Collection Controls (Supabase Shared DB) ---
 
   async function saveBoardToCollection() {
@@ -814,11 +851,28 @@
 
     // 4. Save to Supabase
     saveBoardBtn.disabled = true;
-    saveBoardBtn.textContent = "Salvando...";
-
-    const userName = localStorage.getItem("roleta-nmdp-session") || "Anônimo";
+    saveBoardBtn.textContent = "Otimizando Imagens...";
 
     try {
+      // Compress any large Base64 images in tiers and bank before saving to prevent payload limits
+      for (const tier of tiers) {
+        for (const item of tier.items) {
+          if (item.src) {
+            item.src = await compressImageDataUrl(item.src);
+          }
+        }
+      }
+
+      for (const item of bank) {
+        if (item.src) {
+          item.src = await compressImageDataUrl(item.src);
+        }
+      }
+
+      saveBoardBtn.textContent = "Salvando...";
+
+      const userName = localStorage.getItem("roleta-nmdp-session") || "Anônimo";
+
       const { error } = await supabase.from("tier_lists").upsert({
         id: activeBoardId,
         title: boardTitle,
@@ -842,12 +896,39 @@
       if (err.code === "PGRST205" || err.status === 404) {
         alert("Erro: A tabela 'tier_lists' não existe no Supabase. Crie-a no painel do Supabase conforme as instruções do menu.");
       } else {
-        alert("Erro ao salvar tabuleiro no banco de dados.");
+        const detail = err.message || err.details || err.hint || (typeof err === "string" ? err : JSON.stringify(err));
+        alert(`Erro ao salvar tabuleiro no banco de dados:\n${detail}`);
       }
     } finally {
       saveBoardBtn.disabled = false;
       saveBoardBtn.textContent = "💾 Salvar Tabuleiro";
     }
+  }
+
+  function isBoardFeatured(board) {
+    if (!board) return false;
+    if (board.is_featured === true) return true;
+    if (board.created_by && board.created_by.toLowerCase() === "global") return true;
+    if (Array.isArray(board.row_metadata)) {
+      const meta = board.row_metadata.find(m => m && m.is_featured !== undefined);
+      if (meta && meta.is_featured === true) return true;
+    }
+    return false;
+  }
+
+  let selectedUserFilter = "all";
+
+  const savedBoardsCountEl = document.getElementById("saved-boards-count");
+  const featuredBoardsList = document.getElementById("featured-boards-list");
+  const userCardsGrid = document.getElementById("user-cards-grid");
+  const selectedUserHeading = document.getElementById("selected-user-heading");
+  const clearUserFilterBtn = document.getElementById("clear-user-filter-btn");
+
+  if (clearUserFilterBtn) {
+    clearUserFilterBtn.addEventListener("click", () => {
+      selectedUserFilter = "all";
+      renderSavedBoards();
+    });
   }
 
   async function renderSavedBoards() {
@@ -869,41 +950,146 @@
       return;
     }
 
+    const currentSessionUser = (localStorage.getItem("roleta-nmdp-session") || "").toLowerCase().trim();
+    const isLeleUser = (currentSessionUser === "lele");
+
     try {
-      // 2. Query lightweight columns (select tiers but exclude the heavy bank column)
+      // 2. Query lightweight columns
       const { data, error } = await supabase
         .from("tier_lists")
-        .select("id, title, created_by, updated_at, tiers")
+        .select("id, title, created_by, updated_at, tiers, row_metadata")
         .order("updated_at", { ascending: false });
 
       if (error) throw error;
 
       if (!data || data.length === 0) {
+        if (featuredBoardsList) {
+          featuredBoardsList.innerHTML = `<p style="color: var(--text-muted); font-size: 0.85rem; text-align: center; padding: 1rem 0;">Nenhum tabuleiro em destaque no momento.</p>`;
+        }
+        if (userCardsGrid) userCardsGrid.innerHTML = "";
         savedBoardsList.innerHTML = `
           <p class="empty-saved-msg" style="color: var(--text-muted); font-size: 0.95rem; text-align: center; padding: 2rem 0; width: 100%;">
             Nenhum tabuleiro salvo ainda. Crie um acima!
           </p>
         `;
+        if (savedBoardsCountEl) savedBoardsCountEl.textContent = "(0 tabuleiros)";
         return;
       }
 
-      // Clear spinner and render cards
-      savedBoardsList.innerHTML = "";
+      // Separate featured boards vs normal user boards
+      const featuredBoards = data.filter(b => isBoardFeatured(b));
+      const normalBoards = data.filter(b => !isBoardFeatured(b));
 
-      data.forEach(board => {
+      // Calculate count per creator
+      const userCounts = {};
+      normalBoards.forEach(board => {
+        const creator = board.created_by || "Anônimo";
+        userCounts[creator] = (userCounts[creator] || 0) + 1;
+      });
+
+      // Render User Cards Grid
+      if (userCardsGrid) {
+        userCardsGrid.innerHTML = "";
+
+        // 1. "Todos" Card
+        const allCard = document.createElement("button");
+        allCard.type = "button";
+        allCard.className = "user-card-btn" + (selectedUserFilter === "all" ? " active" : "");
+        allCard.innerHTML = `
+          <span>👥 Todos</span>
+          <span class="user-card-count">(${normalBoards.length})</span>
+        `;
+        allCard.addEventListener("click", () => {
+          selectedUserFilter = "all";
+          renderSavedBoards();
+        });
+        userCardsGrid.appendChild(allCard);
+
+        // 2. Individual User Cards
+        Object.keys(userCounts).sort().forEach(creator => {
+          const userCard = document.createElement("button");
+          userCard.type = "button";
+          const isSelected = (selectedUserFilter.toLowerCase() === creator.toLowerCase());
+          userCard.className = "user-card-btn" + (isSelected ? " active" : "");
+
+          userCard.innerHTML = `
+            <span>${creator}</span>
+            <span class="user-card-count">(${userCounts[creator]} ${userCounts[creator] === 1 ? 'tabuleiro' : 'tabuleiros'})</span>
+          `;
+
+          userCard.addEventListener("click", () => {
+            selectedUserFilter = creator.toLowerCase();
+            renderSavedBoards();
+          });
+
+          userCardsGrid.appendChild(userCard);
+        });
+      }
+
+      // Filter normal user boards by selected creator
+      const filteredUserBoards = (selectedUserFilter === "all")
+        ? normalBoards
+        : normalBoards.filter(b => (b.created_by || "").toLowerCase() === selectedUserFilter.toLowerCase());
+
+      // Update Section Header & Clear Filter Button
+      if (selectedUserHeading) {
+        if (selectedUserFilter === "all") {
+          selectedUserHeading.textContent = "Todos os Tabuleiros";
+        } else {
+          const displayCreatorName = Object.keys(userCounts).find(k => k.toLowerCase() === selectedUserFilter) || selectedUserFilter;
+          selectedUserHeading.textContent = `Tabuleiros de ${displayCreatorName}`;
+        }
+      }
+
+      if (clearUserFilterBtn) {
+        clearUserFilterBtn.style.display = (selectedUserFilter !== "all") ? "inline-flex" : "none";
+      }
+
+      if (savedBoardsCountEl) {
+        savedBoardsCountEl.textContent = `(${filteredUserBoards.length} ${filteredUserBoards.length === 1 ? 'tabuleiro' : 'tabuleiros'})`;
+      }
+
+      // Helper function to build board card HTML element
+      function buildBoardCard(board, isFeaturedCard) {
         const card = document.createElement("div");
         card.className = "saved-board-card";
+        if (isFeaturedCard) {
+          card.style.border = "1px solid rgba(255, 215, 0, 0.4)";
+          card.style.background = "rgba(255, 215, 0, 0.02)";
+          card.style.boxShadow = "0 4px 16px rgba(255, 215, 0, 0.08)";
+        }
 
-        // 1. Board Title
+        // Title Header
+        const headerEl = document.createElement("div");
+        headerEl.style.display = "flex";
+        headerEl.style.justifyContent = "space-between";
+        headerEl.style.alignItems = "center";
+        headerEl.style.marginBottom = "0.5rem";
+
         const titleEl = document.createElement("h3");
         titleEl.className = "saved-board-title";
+        titleEl.style.margin = "0";
         titleEl.textContent = board.title || "Sem Título";
-        card.appendChild(titleEl);
+        headerEl.appendChild(titleEl);
 
-        // 2. Mini CSS preview of layout (Actual board tiers with item image backgrounds)
+        if (isFeaturedCard) {
+          const badgeEl = document.createElement("span");
+          badgeEl.style.background = "rgba(255, 215, 0, 0.15)";
+          badgeEl.style.color = "#ffd700";
+          badgeEl.style.border = "1px solid rgba(255, 215, 0, 0.4)";
+          badgeEl.style.padding = "0.2rem 0.55rem";
+          badgeEl.style.borderRadius = "6px";
+          badgeEl.style.fontSize = "0.75rem";
+          badgeEl.style.fontWeight = "700";
+          badgeEl.textContent = "⭐ Destaque Global";
+          headerEl.appendChild(badgeEl);
+        }
+
+        card.appendChild(headerEl);
+
+        // Mini CSS preview layout
         const previewEl = document.createElement("div");
         previewEl.className = "mini-board-preview";
-
         const tiers = board.tiers || [];
 
         tiers.forEach(tier => {
@@ -942,27 +1128,95 @@
 
         card.appendChild(previewEl);
 
-        // 3. Metadata footer
+        // Metadata footer
         const footerEl = document.createElement("div");
         footerEl.className = "saved-board-meta";
+        footerEl.style.display = "flex";
+        footerEl.style.alignItems = "center";
+        footerEl.style.justifyContent = "space-between";
+        footerEl.style.gap = "0.5rem";
+        footerEl.style.flexWrap = "wrap";
 
-        // Creator badge
+        const metaInfo = document.createElement("div");
+        metaInfo.style.display = "flex";
+        metaInfo.style.alignItems = "center";
+        metaInfo.style.gap = "0.75rem";
+        metaInfo.style.flexWrap = "wrap";
+
         const creatorEl = document.createElement("span");
         creatorEl.className = "saved-board-creator";
-        creatorEl.innerHTML = `👤 Criado por: <strong>${board.created_by || "Anônimo"}</strong>`;
-        footerEl.appendChild(creatorEl);
+        if (isFeaturedCard) {
+          creatorEl.innerHTML = `⭐ <strong>Global / Oficial</strong>`;
+        } else {
+          creatorEl.innerHTML = `👤 Criado por: <strong>${board.created_by || "Anônimo"}</strong>`;
+        }
+        metaInfo.appendChild(creatorEl);
 
         const dateEl = document.createElement("span");
         dateEl.className = "saved-board-date";
         const dateObj = new Date(board.updated_at || Date.now());
         dateEl.textContent = `Atualizado: ${dateObj.toLocaleDateString("pt-BR")} ${dateObj.toLocaleTimeString("pt-BR", { hour: '2-digit', minute: '2-digit' })}`;
-        footerEl.appendChild(dateEl);
+        metaInfo.appendChild(dateEl);
+
+        footerEl.appendChild(metaInfo);
+
+        // EXCLUSIVE ACTION FOR USER "lele": Feature / Unfeature Button
+        if (isLeleUser) {
+          const featureBtn = document.createElement("button");
+          featureBtn.type = "button";
+          if (isFeaturedCard) {
+            featureBtn.textContent = "❌ Remover Destaque";
+            featureBtn.className = "btn-secondary";
+            featureBtn.style.padding = "0.25rem 0.6rem";
+            featureBtn.style.fontSize = "0.75rem";
+          } else {
+            featureBtn.textContent = "⭐ Destacar em Globais";
+            featureBtn.className = "btn-primary";
+            featureBtn.style.background = "linear-gradient(135deg, #f1c40f, #f39c12)";
+            featureBtn.style.color = "#000";
+            featureBtn.style.fontWeight = "700";
+            featureBtn.style.padding = "0.25rem 0.6rem";
+            featureBtn.style.fontSize = "0.75rem";
+          }
+
+          featureBtn.addEventListener("click", async (e) => {
+            e.stopPropagation();
+            featureBtn.disabled = true;
+            featureBtn.textContent = "Atualizando...";
+
+            try {
+              let updatedMetadata = Array.isArray(board.row_metadata) ? [...board.row_metadata] : [];
+              updatedMetadata = updatedMetadata.filter(m => !m || m.is_featured === undefined);
+
+              if (!isFeaturedCard) {
+                updatedMetadata.push({ is_featured: true });
+              }
+
+              const updatePayload = {
+                row_metadata: updatedMetadata
+              };
+
+              const { error: updateErr } = await supabase
+                .from("tier_lists")
+                .update(updatePayload)
+                .eq("id", board.id);
+
+              if (updateErr) throw updateErr;
+
+              renderSavedBoards();
+            } catch (err) {
+              console.error("Erro ao alterar destaque:", err);
+              alert("Erro ao alterar destaque: " + (err.message || err));
+            }
+          });
+
+          footerEl.appendChild(featureBtn);
+        }
 
         card.appendChild(footerEl);
 
-        // Click event on whole card to edit/load details ON DEMAND
+        // Click event on card to open editor ON DEMAND
         card.addEventListener("click", async () => {
-          // Prevent double clicks
           if (card.dataset.loading === "true") return;
           card.dataset.loading = "true";
           
@@ -970,7 +1224,6 @@
           titleEl.textContent = "⏳ Carregando...";
 
           try {
-            // Lazy load the full tiers and bank payload point-lookup query
             const { data: details, error: detailsError } = await supabase
               .from("tier_lists")
               .select("tiers, bank")
@@ -979,25 +1232,21 @@
 
             if (detailsError) throw detailsError;
 
-            // Load details into editor state
             activeBoardId = board.id;
             boardTitle = board.title;
             tiersData = JSON.parse(JSON.stringify(details.tiers || []));
             bankData = JSON.parse(JSON.stringify(details.bank || []));
             activeEditing = true;
 
-            // Switch to editor
             activeTierlistTitle.textContent = boardTitle;
             renderBoard();
             renderBank();
 
-            // Save the newly rendered state to local storage
             saveBoardState();
 
             landingWrapper.style.display = "none";
             editScreen.style.display = "flex";
 
-            // Show delete board button since it is a saved board
             deleteBoardBtn.style.display = "inline-block";
           } catch (err) {
             console.error("Erro ao carregar detalhes:", err);
@@ -1008,8 +1257,36 @@
           }
         });
 
-        savedBoardsList.appendChild(card);
-      });
+        return card;
+      }
+
+      // Render Featured Boards Section
+      if (featuredBoardsList) {
+        featuredBoardsList.innerHTML = "";
+        if (featuredBoards.length === 0) {
+          featuredBoardsList.innerHTML = `<p style="color: var(--text-muted); font-size: 0.85rem; text-align: center; padding: 1rem 0;">Nenhum tabuleiro em destaque no momento.</p>`;
+        } else {
+          featuredBoards.forEach(board => {
+            const card = buildBoardCard(board, true);
+            featuredBoardsList.appendChild(card);
+          });
+        }
+      }
+
+      // Render User Boards Section
+      savedBoardsList.innerHTML = "";
+      if (filteredUserBoards.length === 0) {
+        savedBoardsList.innerHTML = `
+          <p class="empty-saved-msg" style="color: var(--text-muted); font-size: 0.95rem; text-align: center; padding: 2rem 0; width: 100%;">
+            Nenhum tabuleiro encontrado para o criador selecionado.
+          </p>
+        `;
+      } else {
+        filteredUserBoards.forEach(board => {
+          const card = buildBoardCard(board, false);
+          savedBoardsList.appendChild(card);
+        });
+      }
     } catch (err) {
       console.error(err);
       if (err.code === "PGRST205" || err.status === 404) {

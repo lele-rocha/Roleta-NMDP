@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Roleta NMDP - Tier List</title>
-  <link rel="stylesheet" href="style.css?v=28">
+  <link rel="stylesheet" href="style.css?v=31">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
@@ -94,9 +94,44 @@
 
         <!-- Full-width Saved Boards Gallery -->
         <section id="tierlist-saved-boards-screen" class="panel" style="padding: 2rem; display: flex; flex-direction: column;">
-          <h2 class="edit-modal__title" style="margin-bottom: 1.5rem; text-align: center; font-size: 1.6rem; border-bottom: 1px solid var(--border); padding-bottom: 1rem;">Tabuleiros Salvos</h2>
+          <!-- 1. Featured Boards Section (Global Official Tier Lists) -->
+          <div id="featured-boards-section" style="background: rgba(255, 215, 0, 0.03); border: 1px solid rgba(255, 215, 0, 0.25); border-radius: 12px; padding: 1.25rem; margin-bottom: 1.75rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+              <h3 style="margin: 0; font-size: 1.15rem; font-weight: 800; color: #ffd700; display: flex; align-items: center; gap: 0.4rem;">
+                ⭐ Tabuleiros em Destaque (Globais)
+              </h3>
+              <span style="font-size: 0.75rem; color: var(--text-muted); background: rgba(255,215,0,0.1); border: 1px solid rgba(255,215,0,0.3); padding: 0.2rem 0.6rem; border-radius: 12px; font-weight: 600;">Oficial / Comunidade</span>
+            </div>
+            <div id="featured-boards-list" style="display: flex; flex-direction: column; gap: 1.25rem;">
+              <p style="color: var(--text-muted); font-size: 0.85rem; text-align: center; padding: 1rem 0;">Nenhum tabuleiro em destaque no momento.</p>
+            </div>
+          </div>
+
+          <!-- 2. User Cards Grid Section -->
+          <div id="user-cards-section" style="margin-bottom: 1.5rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+              <h3 style="margin: 0; font-size: 1.15rem; font-weight: 800; color: var(--text); display: flex; align-items: center; gap: 0.4rem;">
+                👥 Criadores de Tabuleiros
+              </h3>
+              <span style="font-size: 0.75rem; color: var(--text-muted);">Clique no usuário para ver seus tabuleiros</span>
+            </div>
+            <div id="user-cards-grid" class="user-cards-grid">
+              <!-- Dynamically populated user card buttons -->
+            </div>
+          </div>
+
+          <!-- 3. Saved Boards List Header -->
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; border-bottom: 1px solid var(--border); padding-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem;">
+            <div style="display: flex; align-items: center; gap: 0.6rem;">
+              <h3 id="selected-user-heading" style="margin: 0; font-size: 1.25rem; font-weight: 700; color: var(--text);">Todos os Tabuleiros</h3>
+              <span id="saved-boards-count" style="font-size: 0.8rem; font-weight: 700; color: var(--accent); background: rgba(108, 92, 231, 0.1); padding: 0.25rem 0.6rem; border-radius: 6px; border: 1px solid rgba(108, 92, 231, 0.2);">(0 tabuleiros)</span>
+            </div>
+            <button type="button" id="clear-user-filter-btn" class="btn-secondary" style="display: none; font-size: 0.8rem; padding: 0.3rem 0.75rem; border-radius: 8px;">
+              ⬅️ Ver Todos os Criadores
+            </button>
+          </div>
           
-          <div id="saved-boards-list" style="display: flex; flex-direction: column; gap: 1.5rem; max-height: 800px; overflow-y: auto; padding-right: 4px; flex: 1;">
+          <div id="saved-boards-list" style="display: flex; flex-direction: column; gap: 1.5rem; max-height: 650px; overflow-y: auto; padding-right: 4px; flex: 1;">
             <p class="empty-saved-msg" style="color: var(--text-muted); font-size: 0.95rem; text-align: center; padding: 2rem 0; width: 100%;">
               Nenhum tabuleiro salvo ainda. Crie um acima!
             </p>
@@ -215,7 +250,7 @@
   <!-- External libraries and scripts -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js?v=28"></script>
-  <script src="tierlist.js?v=28"></script>
+  <script src="config.js?v=31"></script>
+  <script src="tierlist.js?v=31"></script>
 </body>
 </html>
