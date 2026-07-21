@@ -2075,3 +2075,112 @@ select {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
 }
+
+/* --- Audio Tab Hub Custom Styling --- */
+#audio-list {
+  list-style: none;
+  padding: 0;
+  margin: 0.75rem 0 0 0;
+  max-height: 280px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+/* Scrollbar styling for audio-list */
+#audio-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+#audio-list::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+}
+
+#audio-list::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+
+.audio-item-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.45rem 0.65rem;
+  transition: background 0.2s, border-color 0.2s, transform 0.15s;
+}
+
+.audio-item-card:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.audio-item-card.playing {
+  background: rgba(108, 92, 231, 0.15);
+  border-color: var(--accent);
+  box-shadow: 0 0 10px rgba(108, 92, 231, 0.3);
+}
+
+.audio-item-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.btn-play-audio {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
+  border-radius: 50%;
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: transform 0.15s, background 0.2s;
+}
+
+.btn-play-audio:hover {
+  transform: scale(1.08);
+  background: #5b4cc4;
+}
+
+.btn-play-audio.playing {
+  background: #ff7675;
+}
+
+.audio-item-name {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.btn-remove-single-audio {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 118, 117, 0.3);
+  background: rgba(255, 118, 117, 0.1);
+  color: #ff7675;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+  white-space: nowrap;
+}
+
+.btn-remove-single-audio:hover {
+  background: #ff7675;
+  color: #fff;
+}

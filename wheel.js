@@ -39,32 +39,290 @@
   const clearCardsBtn = document.getElementById("clear-cards-btn");
 
   // Audio library state
-  let audioLibrary = [];
+  let audioLibrary = []; // each: { id, name, url, normalizedGain }
   let currentAudio = null;
+  let currentAudioItem = null;
+  let playingAudioId = null;
+
+  // Master volume and audio normalization state
+  let masterVolume = parseFloat(localStorage.getItem("roleta-nmdp-master-volume") || "1.0");
+  let normalizeAudioEnabled = localStorage.getItem("roleta-nmdp-normalize-audio") !== "false";
 
   const audioLibraryInput = document.getElementById("audio-library-input");
   const audioListEl = document.getElementById("audio-list");
   const removeAudioBtn = document.getElementById("remove-audio-btn");
   const audioModeSelect = document.getElementById("audio-mode-select");
   const audioFixedSelect = document.getElementById("audio-fixed-select");
+  const audioNoticeBox = document.getElementById("audio-notice-box");
+
+  const masterVolumeSlider = document.getElementById("master-volume-slider");
+  const masterVolumeValue = document.getElementById("master-volume-value");
+  const masterVolumeIcon = document.getElementById("master-volume-icon");
+  const normalizeAudioCheckbox = document.getElementById("normalize-audio-checkbox");
+
+  // Web Audio Context for audio normalization / peak analysis
+  let audioCtx = null;
+  function getAudioContext() {
+    if (!audioCtx) {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (AudioCtx) audioCtx = new AudioCtx();
+    }
+    return audioCtx;
+  }
+
+  async function calculateAudioNormalizedGain(url) {
+    try {
+      const ctx = getAudioContext();
+      if (!ctx) return 1.0;
+      const res = await fetch(url);
+      const buf = await res.arrayBuffer();
+      const audioBuf = await ctx.decodeAudioData(buf);
+      
+      let maxPeak = 0;
+      for (let c = 0; c < audioBuf.numberOfChannels; c++) {
+        const data = audioBuf.getChannelData(c);
+        for (let i = 0; i < data.length; i += 10) {
+          const val = Math.abs(data[i]);
+          if (val > maxPeak) maxPeak = val;
+        }
+      }
+
+      if (maxPeak <= 0.01) return 1.0;
+
+      // Target peak amplitude: 0.70 (standardized comfortable loudness level)
+      const targetPeak = 0.70;
+      const gain = targetPeak / maxPeak;
+
+      // Restrict gain scale between 0.3 (if super loud) and 2.5 (if super quiet)
+      return Math.min(2.5, Math.max(0.3, gain));
+    } catch (err) {
+      console.warn("Could not calculate normalized gain:", err);
+      return 1.0;
+    }
+  }
+
+  function calculateEffectiveVolume(item) {
+    let vol = masterVolume;
+    if (normalizeAudioEnabled && item && item.normalizedGain) {
+      vol = vol * item.normalizedGain;
+    }
+    return Math.min(1.0, Math.max(0.0, vol));
+  }
+
+  function updateVolumeUI() {
+    if (masterVolumeSlider) {
+      masterVolumeSlider.value = Math.round(masterVolume * 100);
+    }
+    if (masterVolumeValue) {
+      masterVolumeValue.textContent = Math.round(masterVolume * 100) + "%";
+    }
+    if (masterVolumeIcon) {
+      if (masterVolume <= 0) masterVolumeIcon.textContent = "🔇";
+      else if (masterVolume < 0.5) masterVolumeIcon.textContent = "🔉";
+      else masterVolumeIcon.textContent = "🔊";
+    }
+    if (normalizeAudioCheckbox) {
+      normalizeAudioCheckbox.checked = normalizeAudioEnabled;
+    }
+  }
+
+  if (masterVolumeSlider) {
+    masterVolumeSlider.addEventListener("input", (e) => {
+      masterVolume = parseFloat(e.target.value) / 100;
+      localStorage.setItem("roleta-nmdp-master-volume", masterVolume.toString());
+      updateVolumeUI();
+      if (currentAudio) {
+        currentAudio.volume = calculateEffectiveVolume(currentAudioItem);
+      }
+    });
+  }
+
+  if (normalizeAudioCheckbox) {
+    normalizeAudioCheckbox.addEventListener("change", (e) => {
+      normalizeAudioEnabled = e.target.checked;
+      localStorage.setItem("roleta-nmdp-normalize-audio", normalizeAudioEnabled ? "true" : "false");
+      if (currentAudio) {
+        currentAudio.volume = calculateEffectiveVolume(currentAudioItem);
+      }
+    });
+  }
+
+  function showAudioDatabaseErrorNotice() {
+    if (!audioNoticeBox) return;
+    audioNoticeBox.hidden = false;
+    audioNoticeBox.innerHTML = `
+      <div style="background: rgba(235, 77, 75, 0.1); border: 1px dashed #eb4d4b; padding: 0.75rem; border-radius: 8px; margin-top: 0.75rem; text-align: left; animation: fade-in 0.3s ease;">
+        <p style="color: #ff7675; font-size: 0.8rem; font-weight: bold; margin-bottom: 0.35rem; display: flex; align-items: center; gap: 0.35rem;">
+          ⚠️ Tabela "audios" não encontrada no Supabase!
+        </p>
+        <p style="color: var(--text-muted); font-size: 0.75rem; line-height: 1.3; margin-bottom: 0.5rem;">
+          Para salvar os sons no site para todos os usuários, execute o comando SQL abaixo no <strong>SQL Editor</strong> do seu Supabase:
+        </p>
+        <pre style="background: #000; color: #74b9ff; padding: 0.5rem; border-radius: 6px; font-size: 0.7rem; overflow-x: auto; font-family: monospace; white-space: pre-wrap; word-break: break-all; border: 1px solid var(--border);">CREATE TABLE public.audios (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    audio_url TEXT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE public.audios ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow select" ON public.audios FOR SELECT USING (true);
+CREATE POLICY "Allow insert" ON public.audios FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow update" ON public.audios FOR UPDATE USING (true);
+CREATE POLICY "Allow delete" ON public.audios FOR DELETE USING (true);</pre>
+      </div>
+    `;
+  }
+
+  async function loadAudios() {
+    if (!supabase) return;
+    try {
+      const { data, error } = await supabase
+        .from("audios")
+        .select("id, name, audio_url")
+        .order("created_at", { ascending: true });
+
+      if (error) {
+        if (error.code === "PGRST205" || (error.message && error.message.includes("public.audios"))) {
+          showAudioDatabaseErrorNotice();
+          return;
+        }
+        throw error;
+      }
+
+      if (audioNoticeBox) audioNoticeBox.hidden = true;
+      audioLibrary = (data || []).map(item => ({
+        id: item.id,
+        name: item.name,
+        url: item.audio_url,
+        normalizedGain: 1.0
+      }));
+      refreshAudioUI();
+      updateVolumeUI();
+
+      // Compute peak gain in background for seamless normalization
+      audioLibrary.forEach(async (item) => {
+        item.normalizedGain = await calculateAudioNormalizedGain(item.url);
+      });
+    } catch (e) {
+      console.error("Erro ao carregar áudios do Supabase:", e);
+    }
+  }
+
+  function togglePlayAudio(item) {
+    if (!item || !item.url) return;
+
+    if (playingAudioId === item.id && currentAudio) {
+      if (currentAudio.paused) {
+        currentAudio.play().catch(() => {});
+      } else {
+        currentAudio.pause();
+      }
+      refreshAudioUI();
+      return;
+    }
+
+    if (currentAudio) {
+      currentAudio.pause();
+      currentAudio.currentTime = 0;
+    }
+
+    playingAudioId = item.id;
+    currentAudioItem = item;
+    currentAudio = new Audio(item.url);
+    currentAudio.volume = calculateEffectiveVolume(item);
+
+    currentAudio.onended = () => {
+      playingAudioId = null;
+      currentAudioItem = null;
+      refreshAudioUI();
+    };
+
+    currentAudio.onpause = () => {
+      refreshAudioUI();
+    };
+
+    currentAudio.onplay = () => {
+      refreshAudioUI();
+    };
+
+    currentAudio.play().catch((err) => {
+      console.error("Erro ao reproduzir áudio:", err);
+      playingAudioId = null;
+      currentAudioItem = null;
+      refreshAudioUI();
+    });
+
+    refreshAudioUI();
+  }
 
   // Helper to refresh UI for audio library
   function refreshAudioUI() {
     audioListEl.innerHTML = "";
     audioLibrary.forEach((item, idx) => {
       const li = document.createElement("li");
-      li.textContent = item.name;
-      const removeBtn = document.createElement("button");
-      removeBtn.textContent = "Remover";
-      removeBtn.className = "btn-danger";
-      removeBtn.style.marginLeft = "0.5rem";
-      removeBtn.addEventListener("click", () => {
-        audioLibrary.splice(idx, 1);
-        refreshAudioUI();
+      li.className = "audio-item-card";
+
+      const isCurrentlyPlaying = (playingAudioId === item.id && currentAudio && !currentAudio.paused);
+      if (isCurrentlyPlaying) {
+        li.classList.add("playing");
+      }
+
+      const infoDiv = document.createElement("div");
+      infoDiv.className = "audio-item-info";
+
+      // Play / Pause toggle button
+      const playBtn = document.createElement("button");
+      playBtn.className = "btn-play-audio";
+      if (isCurrentlyPlaying) {
+        playBtn.classList.add("playing");
+      }
+      playBtn.textContent = isCurrentlyPlaying ? "⏸️" : "▶️";
+      playBtn.title = isCurrentlyPlaying ? "Pausar Áudio" : "Tocar Áudio";
+      playBtn.addEventListener("click", () => {
+        togglePlayAudio(item);
       });
+
+      const titleSpan = document.createElement("span");
+      titleSpan.className = "audio-item-name";
+      titleSpan.textContent = item.name;
+      titleSpan.title = item.name;
+
+      infoDiv.appendChild(playBtn);
+      infoDiv.appendChild(titleSpan);
+
+      // Remove single sound button
+      const removeBtn = document.createElement("button");
+      removeBtn.textContent = "🗑️ Excluir";
+      removeBtn.className = "btn-remove-single-audio";
+      removeBtn.addEventListener("click", async () => {
+        const confirmDel = confirm(`Deseja remover o áudio "${item.name}" para todos os usuários?`);
+        if (!confirmDel) return;
+
+        removeBtn.disabled = true;
+        try {
+          if (playingAudioId === item.id && currentAudio) {
+            currentAudio.pause();
+            currentAudio = null;
+            playingAudioId = null;
+          }
+          if (item.id) {
+            await supabase.from("audios").delete().eq("id", item.id);
+          }
+          audioLibrary.splice(idx, 1);
+          refreshAudioUI();
+        } catch (err) {
+          console.error("Erro ao remover áudio:", err);
+          alert("Erro ao remover áudio do banco de dados.");
+        }
+      });
+
+      li.appendChild(infoDiv);
       li.appendChild(removeBtn);
       audioListEl.appendChild(li);
     });
+
     removeAudioBtn.style.display = audioLibrary.length ? "inline-block" : "none";
 
     audioFixedSelect.innerHTML = "";
@@ -74,6 +332,7 @@
       opt.textContent = item.name;
       audioFixedSelect.appendChild(opt);
     });
+
     if (audioModeSelect.value === "fixed") {
       audioFixedSelect.style.display = "block";
     } else {
@@ -81,43 +340,122 @@
     }
   }
 
-  audioLibraryInput.addEventListener("change", (e) => {
-    const files = Array.from(e.target.files);
-    files.forEach((file) => {
-      const url = URL.createObjectURL(file);
-      audioLibrary.push({ name: file.name, url });
+  function fileToDataURL(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => resolve(e.target.result);
+      reader.onerror = (e) => reject(e);
+      reader.readAsDataURL(file);
     });
-    e.target.value = "";
-    refreshAudioUI();
+  }
+
+  audioLibraryInput.addEventListener("change", async (e) => {
+    const files = Array.from(e.target.files);
+    if (!files.length) return;
+
+    if (!supabase) {
+      alert("Erro: Conexão com Supabase não está ativa!");
+      return;
+    }
+
+    const uploadLabel = document.querySelector('label[for="audio-library-input"]');
+    const originalText = uploadLabel ? uploadLabel.textContent : "Adicionar Áudios";
+    if (uploadLabel) uploadLabel.textContent = "Salvando no Banco...";
+    audioLibraryInput.disabled = true;
+
+    try {
+      for (const file of files) {
+        const dataUrl = await fileToDataURL(file);
+        const newId = "audio-" + Date.now().toString(36) + "-" + Math.random().toString(36).substr(2, 5);
+
+        const { error } = await supabase.from("audios").insert([{
+          id: newId,
+          name: file.name,
+          audio_url: dataUrl,
+          created_at: new Date().toISOString()
+        }]);
+
+        if (error) {
+          if (error.code === "PGRST205" || (error.message && error.message.includes("public.audios"))) {
+            showAudioDatabaseErrorNotice();
+            alert("A tabela 'audios' não existe no Supabase. Crie-a no painel do Supabase conforme o aviso!");
+            break;
+          }
+          throw error;
+        }
+      }
+      await loadAudios();
+    } catch (err) {
+      console.error("Erro ao fazer upload dos áudios:", err);
+      alert("Houve um erro ao salvar o áudio no banco de dados.");
+    } finally {
+      audioLibraryInput.disabled = false;
+      if (uploadLabel) uploadLabel.textContent = originalText;
+      e.target.value = "";
+    }
   });
 
-  removeAudioBtn.addEventListener("click", () => {
-    audioLibrary.forEach(item => URL.revokeObjectURL(item.url));
-    audioLibrary = [];
-    refreshAudioUI();
+  removeAudioBtn.addEventListener("click", async () => {
+    if (!audioLibrary.length) return;
+    const confirmClear = confirm("Tem certeza que deseja excluir TODOS os áudios da biblioteca para todos os usuários?");
+    if (!confirmClear) return;
+
+    removeAudioBtn.disabled = true;
+    removeAudioBtn.textContent = "Removendo...";
+
+    try {
+      if (currentAudio) {
+        currentAudio.pause();
+        currentAudio = null;
+        playingAudioId = null;
+      }
+      const ids = audioLibrary.map(a => a.id).filter(Boolean);
+      if (ids.length) {
+        await supabase.from("audios").delete().in("id", ids);
+      }
+      audioLibrary = [];
+      refreshAudioUI();
+    } catch (err) {
+      console.error("Erro ao remover todos os áudios:", err);
+      alert("Erro ao remover áudios do banco de dados.");
+    } finally {
+      removeAudioBtn.disabled = false;
+      removeAudioBtn.textContent = "Remover Todos";
+    }
   });
 
   audioModeSelect.addEventListener("change", () => {
     refreshAudioUI();
   });
 
+  function setupAudioRealtime() {
+    if (!supabase) return;
+    supabase
+      .channel("audios-realtime")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "audios" },
+        () => {
+          loadAudios();
+        }
+      )
+      .subscribe();
+  }
+
   function playWinnerSound() {
     if (audioLibrary.length === 0) return;
-    let soundUrl;
+    let selectedItem;
     if (audioModeSelect.value === "random") {
       const idx = Math.floor(Math.random() * audioLibrary.length);
-      soundUrl = audioLibrary[idx].url;
+      selectedItem = audioLibrary[idx];
     } else {
       const idx = parseInt(audioFixedSelect.value, 10);
       if (isNaN(idx) || idx < 0 || idx >= audioLibrary.length) return;
-      soundUrl = audioLibrary[idx].url;
+      selectedItem = audioLibrary[idx];
     }
-    if (currentAudio) {
-      currentAudio.pause();
-      currentAudio.currentTime = 0;
+    if (selectedItem) {
+      togglePlayAudio(selectedItem);
     }
-    currentAudio = new Audio(soundUrl);
-    currentAudio.play().catch(() => {});
   }
 
   const POINTER_ANGLE = -Math.PI / 2;
@@ -840,4 +1178,6 @@
   loadCardsWheelState();
   updateDurationLabel();
   updateUI();
+  loadAudios();
+  setupAudioRealtime();
 })();
