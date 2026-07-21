@@ -136,6 +136,9 @@
       });
     });
 
+    state.activeBoardIsFeatured = activeBoardIsFeatured;
+    state.activeBoardRatings = activeBoardRatings;
+
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     } catch (quotaError) {
@@ -154,11 +157,15 @@
         boardTitle = parsed.boardTitle || "Minha Tier List";
         tiersData = parsed.tiers || [];
         bankData = parsed.bank || [];
+        activeBoardIsFeatured = parsed.activeBoardIsFeatured || false;
+        activeBoardRatings = parsed.activeBoardRatings || {};
         return;
       } catch (e) {
         console.error("Erro ao ler estado do localStorage:", e);
       }
     }
+    activeBoardIsFeatured = false;
+    activeBoardRatings = {};
     activeEditing = false;
     boardTitle = "Minha Tier List";
     tiersData = JSON.parse(JSON.stringify(DEFAULT_TIERS));
@@ -290,9 +297,19 @@
     return { avg, count: ratings.length, ratings };
   }
 
-  async function loadFeaturedBoardRatings(boardId) {
+  async function loadFeaturedBoardRatings(boardId, rowMetadata) {
     activeBoardRatings = {};
-    if (!supabase || !boardId) return;
+    if (!boardId) return;
+
+    // 1. Load embedded ratings from rowMetadata array if present
+    if (Array.isArray(rowMetadata)) {
+      const metaRatingsObj = rowMetadata.find(m => m && m.ratings !== undefined);
+      if (metaRatingsObj && metaRatingsObj.ratings) {
+        activeBoardRatings = JSON.parse(JSON.stringify(metaRatingsObj.ratings));
+      }
+    }
+
+    if (!supabase) return;
 
     try {
       const { data, error } = await supabase
@@ -300,13 +317,19 @@
         .select("*")
         .eq("board_id", boardId);
 
-      if (!error && data) {
+      if (!error && data && data.length > 0) {
         data.forEach(r => {
           if (!activeBoardRatings[r.item_id]) activeBoardRatings[r.item_id] = [];
-          activeBoardRatings[r.item_id].push({
-            userName: r.user_name,
-            score: Number(r.score)
-          });
+          const sessionUser = (r.user_name || "").toLowerCase();
+          const existing = activeBoardRatings[r.item_id].find(x => (x.userName || "").toLowerCase() === sessionUser);
+          if (existing) {
+            existing.score = Number(r.score);
+          } else {
+            activeBoardRatings[r.item_id].push({
+              userName: r.user_name,
+              score: Number(r.score)
+            });
+          }
         });
       }
     } catch (err) {
@@ -1134,11 +1157,23 @@
         }
       }
 
+      // Preserve featured status and activeBoardRatings inside row_metadata array
+      if (activeBoardIsFeatured) {
+        row_metadata.push({
+          is_featured: true,
+          ratings: activeBoardRatings
+        });
+      } else if (Object.keys(activeBoardRatings).length > 0) {
+        row_metadata.push({
+          ratings: activeBoardRatings
+        });
+      }
+
       saveBoardBtn.textContent = "Salvando...";
 
       const userName = localStorage.getItem("roleta-nmdp-session") || "Anônimo";
 
-      const { error } = await supabase.from("tier_lists").upsert({
+      const upsertPayload = {
         id: activeBoardId,
         title: boardTitle,
         created_by: userName,
@@ -1146,7 +1181,13 @@
         bank: bank,
         row_metadata: row_metadata,
         updated_at: new Date().toISOString()
-      });
+      };
+
+      if (activeBoardIsFeatured) {
+        upsertPayload.is_featured = true;
+      }
+
+      const { error } = await supabase.from("tier_lists").upsert(upsertPayload);
 
       if (error) throw error;
 
@@ -1466,7 +1507,9 @@
                 .update(updatePayload)
                 .eq("id", board.id);
 
-              if (updateErr) throw updateErr;
+              if (board.id === activeBoardId) {
+                activeBoardIsFeatured = !isFeaturedCard;
+              }
 
               renderSavedBoards();
             } catch (err) {
@@ -1499,12 +1542,13 @@
 
             activeBoardId = board.id;
             boardTitle = board.title;
+            activeBoardIsFeatured = isFeaturedCard || isBoardFeatured(board);
             tiersData = JSON.parse(JSON.stringify(details.tiers || []));
             bankData = JSON.parse(JSON.stringify(details.bank || []));
             activeEditing = true;
 
-            await loadFeaturedBoardRatings(board.id);
-            if (isFeaturedCard) {
+            await loadFeaturedBoardRatings(board.id, board.row_metadata);
+            if (activeBoardIsFeatured) {
               applyFeaturedAutoSorting();
             }
 
