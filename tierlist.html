@@ -25,6 +25,19 @@
       <p class="subtitle">Crie, customize e ordene itens em categorias personalizadas</p>
     </header>
 
+    <!-- User Login & Session Bar -->
+    <div class="user-session-bar" style="margin-bottom: 1rem;">
+      <div id="user-login-form" class="user-session-form">
+        <label for="username-input" class="label-inline">Identifique-se para criar/votar:</label>
+        <input type="text" id="username-input" class="input-text-sm" placeholder="Digite seu nome" />
+        <button type="button" id="login-btn" class="btn-primary-sm">Entrar</button>
+      </div>
+      <div id="user-profile-status" class="user-session-profile" style="display: none;">
+        <span>Usuário ativo: <strong id="active-username" class="accent-text"></strong></span>
+        <button type="button" id="logout-btn" class="btn-secondary-sm">Sair / Trocar Usuário</button>
+      </div>
+    </div>
+
     <main class="voting-main">
       <!-- 1. SETUP / CREATION LANDING SCREEN -->
       <div id="tierlist-landing-wrapper" style="display: flex; flex-direction: column; gap: 1.5rem; margin: 1rem auto 3rem; max-width: 1000px; width: 100%;">
@@ -159,6 +172,7 @@
               <button type="button" id="clear-items-btn" class="btn-secondary-sm">🧹 Limpar Tabuleiro</button>
               <button type="button" id="clear-all-btn" class="btn-danger-sm">🗑️ Limpar Tudo</button>
               <button type="button" id="delete-board-btn" class="btn-danger-sm" style="display: none;" title="Excluir este tabuleiro permanentemente">🗑️ Excluir Tabuleiro</button>
+              <button type="button" id="change-owner-btn" class="btn-secondary-sm" style="display: none; background: linear-gradient(135deg, #00b894, #00cec9); color: #fff; font-weight: 700;" title="Alterar o proprietário deste tabuleiro">👤 Alterar Criador</button>
             </div>
             <div class="tierlist-btn-group">
               <button type="button" id="open-import-modal-btn" class="btn-secondary-sm" style="background: rgba(108, 92, 231, 0.15); border: 1px solid var(--accent); color: var(--text);">📥 Importar da Galeria</button>
@@ -169,6 +183,21 @@
 
         <!-- Tier List Board -->
         <section id="tier-list-board" class="tier-board-container"></section>
+
+        <!-- Unvoted Items Queue (Aguardando Votação) -->
+        <section id="unvoted-bank-section" class="panel" style="padding: 1.5rem; background: rgba(255, 165, 0, 0.03); border: 1px solid rgba(255, 165, 0, 0.3); border-radius: 12px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem;">
+            <h3 class="label" style="margin: 0; color: #ff9f43; display: flex; align-items: center; gap: 0.4rem;">
+              ⏳ Aguardando Votação (Vote no item para enviá-lo à Tier List)
+            </h3>
+            <span id="unvoted-bank-count" style="font-size: 0.8rem; font-weight: 700; color: #ff9f43; background: rgba(255, 159, 67, 0.15); padding: 0.25rem 0.6rem; border-radius: 6px; border: 1px solid rgba(255, 159, 67, 0.3);">(0 itens)</span>
+          </div>
+          <div id="unvoted-images-bank" class="unplaced-images-bank dropzone" data-unvoted-bank="true" style="min-height: 90px;">
+            <p class="empty-unvoted-msg" style="color: var(--text-muted); font-size: 0.9rem; text-align: center; width: 100%; padding: 1rem 0;">
+              Nenhum item aguardando votação. Todos os itens já possuem votos ou estão no banco!
+            </p>
+          </div>
+        </section>
 
         <!-- Unplaced Images Bank -->
         <section class="panel" style="padding: 1.5rem;">

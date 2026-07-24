@@ -69,6 +69,8 @@
 
   const boardContainer = document.getElementById("tier-list-board");
   const bankContainer = document.getElementById("unplaced-images-bank");
+  const unvotedBankContainer = document.getElementById("unvoted-images-bank");
+  const unvotedBankCountEl = document.getElementById("unvoted-bank-count");
 
   // Modal Selectors
   const rowSettingsOverlay = document.getElementById("row-settings-overlay");
@@ -86,11 +88,165 @@
   let activeBoardId = null;
   let activeEditing = false;
   let boardTitle = "Minha Tier List";
+  let activeBoardIsFeatured = false;
+  let activeBoardCreatedBy = null;
   let tiersData = [];
   let bankData = [];
+  let unvotedBankData = [];
   let draggedEl = null;
   let activeEditingRowId = null;
   let selectedPresetColor = "";
+
+  // User Session selectors
+  const userLoginForm = document.getElementById("user-login-form");
+  const userProfileStatus = document.getElementById("user-profile-status");
+  const usernameInput = document.getElementById("username-input");
+  const activeUsernameEl = document.getElementById("active-username");
+  const loginBtn = document.getElementById("login-btn");
+  const logoutBtn = document.getElementById("logout-btn");
+
+  const SESSION_STORAGE_KEY = "roleta-nmdp-session";
+
+  function loadSessionUser() {
+    return (localStorage.getItem(SESSION_STORAGE_KEY) || "").trim();
+  }
+
+  function updateUserSessionUI() {
+    const currentUsername = loadSessionUser();
+
+    if (currentUsername) {
+      if (userLoginForm) userLoginForm.style.display = "none";
+      if (userProfileStatus) userProfileStatus.style.display = "flex";
+      if (activeUsernameEl) activeUsernameEl.textContent = currentUsername;
+    } else {
+      if (userLoginForm) userLoginForm.style.display = "flex";
+      if (userProfileStatus) userProfileStatus.style.display = "none";
+      if (activeUsernameEl) activeUsernameEl.textContent = "";
+    }
+
+    if (typeof renderSavedBoards === "function") {
+      renderSavedBoards();
+    }
+    if (activeEditing && typeof updateBoardPermissionsUI === "function") {
+      updateBoardPermissionsUI();
+    }
+  }
+
+  if (loginBtn && usernameInput) {
+    loginBtn.addEventListener("click", () => {
+      const name = usernameInput.value.trim();
+      if (name) {
+        localStorage.setItem(SESSION_STORAGE_KEY, name);
+        usernameInput.value = "";
+        updateUserSessionUI();
+      }
+    });
+    usernameInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        loginBtn.click();
+      }
+    });
+  }
+
+  if (logoutBtn) {
+    logoutBtn.addEventListener("click", () => {
+      localStorage.removeItem(SESSION_STORAGE_KEY);
+      updateUserSessionUI();
+    });
+  }
+
+  function canUserVoteOnActiveBoard() {
+    if (activeBoardIsFeatured) return true;
+    const sessionUser = loadSessionUser().toLowerCase();
+    const creator = (activeBoardCreatedBy || "").trim().toLowerCase();
+
+    if (!sessionUser) return false;
+    return sessionUser === "lele" || (creator && sessionUser === creator);
+  }
+
+  function canUserEditActiveBoard() {
+    const sessionUser = loadSessionUser().toLowerCase();
+    return sessionUser === "lele";
+  }
+
+  function updateBoardPermissionsUI() {
+    const canVote = canUserVoteOnActiveBoard();
+    const canEdit = canUserEditActiveBoard();
+
+    // Action buttons visibility (only 'lele' can edit board layout/structure)
+    const saveBoardBtn = document.getElementById("save-board-btn");
+    const addRowBtn = document.getElementById("add-row-btn");
+    const resetTiersBtn = document.getElementById("reset-tiers-btn");
+    const clearItemsBtn = document.getElementById("clear-items-btn");
+    const clearAllBtn = document.getElementById("clear-all-btn");
+    const deleteBoardBtn = document.getElementById("delete-board-btn");
+    const changeOwnerBtn = document.getElementById("change-owner-btn");
+
+    if (saveBoardBtn) saveBoardBtn.style.display = canEdit ? "inline-block" : "none";
+    if (addRowBtn) addRowBtn.style.display = canEdit ? "inline-block" : "none";
+    if (resetTiersBtn) resetTiersBtn.style.display = canEdit ? "inline-block" : "none";
+    if (clearItemsBtn) clearItemsBtn.style.display = canEdit ? "inline-block" : "none";
+    if (clearAllBtn) clearAllBtn.style.display = canEdit ? "inline-block" : "none";
+    if (deleteBoardBtn) deleteBoardBtn.style.display = (canEdit && activeBoardId) ? "inline-block" : "none";
+    if (changeOwnerBtn) changeOwnerBtn.style.display = (canEdit && activeBoardId) ? "inline-block" : "none";
+
+    // Row controls visibility (only 'lele' can edit rows)
+    document.querySelectorAll(".btn-tier-ctrl, .tier-controls").forEach(ctrl => {
+      ctrl.style.display = canEdit ? "flex" : "none";
+    });
+
+    // Make images non-draggable for non-editors (only 'lele' can drag/rearrange)
+    document.querySelectorAll(".tier-item-img").forEach(img => {
+      img.draggable = canEdit;
+    });
+
+    // Permission notice header badge
+    let permNotice = document.getElementById("board-permission-notice");
+    if (!permNotice) {
+      permNotice = document.createElement("div");
+      permNotice.id = "board-permission-notice";
+      permNotice.style.fontSize = "0.85rem";
+      permNotice.style.marginTop = "0.35rem";
+      permNotice.style.padding = "0.35rem 0.75rem";
+      permNotice.style.borderRadius = "6px";
+      permNotice.style.fontWeight = "700";
+      permNotice.style.display = "inline-block";
+
+      const titleHeader = document.getElementById("active-tierlist-title");
+      if (titleHeader && titleHeader.parentElement) {
+        titleHeader.parentElement.appendChild(permNotice);
+      }
+    }
+
+    if (permNotice) {
+      const sessionUser = loadSessionUser();
+      if (activeBoardIsFeatured) {
+        permNotice.style.background = "rgba(255, 215, 0, 0.15)";
+        permNotice.style.color = "#ffd700";
+        permNotice.style.border = "1px solid rgba(255, 215, 0, 0.4)";
+        if (canEdit) {
+          permNotice.textContent = "⭐ Tabuleiro em Destaque Global (Modo Admin lele | Votação aberta a todos)";
+        } else {
+          permNotice.textContent = "⭐ Tabuleiro em Destaque Global (Votação aberta a todos | Edição restrita ao lele)";
+        }
+      } else if (canEdit) {
+        permNotice.style.background = "rgba(46, 204, 113, 0.15)";
+        permNotice.style.color = "#2ecc71";
+        permNotice.style.border = "1px solid rgba(46, 204, 113, 0.4)";
+        permNotice.textContent = `🔓 Modo Admin lele (Criado por: ${activeBoardCreatedBy || sessionUser})`;
+      } else if (canVote) {
+        permNotice.style.background = "rgba(52, 152, 219, 0.15)";
+        permNotice.style.color = "#3498db";
+        permNotice.style.border = "1px solid rgba(52, 152, 219, 0.4)";
+        permNotice.textContent = `🗳️ Modo Votação (Criado por: ${activeBoardCreatedBy || "Você"} | Edição restrita ao lele)`;
+      } else {
+        permNotice.style.background = "rgba(231, 76, 60, 0.15)";
+        permNotice.style.color = "#e74c3c";
+        permNotice.style.border = "1px solid rgba(231, 76, 60, 0.4)";
+        permNotice.textContent = `🔒 Somente Leitura (Criado por: ${activeBoardCreatedBy || "outro usuário"} | Votação e edição restritas)`;
+      }
+    }
+  }
 
   // --- State persistence ---
 
@@ -136,7 +292,18 @@
       });
     });
 
+    // Extract Unvoted Bank
+    state.unvotedBank = [];
+    document.querySelectorAll("#unvoted-images-bank .tier-item-img").forEach(img => {
+      state.unvotedBank.push({
+        id: img.dataset.id,
+        src: img.src,
+        title: img.title || ""
+      });
+    });
+
     state.activeBoardIsFeatured = activeBoardIsFeatured;
+    state.activeBoardCreatedBy = activeBoardCreatedBy;
     state.activeBoardRatings = activeBoardRatings;
 
     try {
@@ -157,7 +324,9 @@
         boardTitle = parsed.boardTitle || "Minha Tier List";
         tiersData = parsed.tiers || [];
         bankData = parsed.bank || [];
+        unvotedBankData = parsed.unvotedBank || [];
         activeBoardIsFeatured = parsed.activeBoardIsFeatured || false;
+        activeBoardCreatedBy = parsed.activeBoardCreatedBy || null;
         activeBoardRatings = parsed.activeBoardRatings || {};
         return;
       } catch (e) {
@@ -165,11 +334,13 @@
       }
     }
     activeBoardIsFeatured = false;
+    activeBoardCreatedBy = null;
     activeBoardRatings = {};
     activeEditing = false;
     boardTitle = "Minha Tier List";
     tiersData = JSON.parse(JSON.stringify(DEFAULT_TIERS));
     bankData = [];
+    unvotedBankData = [];
   }
 
   // --- Rendering UI elements ---
@@ -180,6 +351,8 @@
       const rowEl = createRowElement(tier);
       boardContainer.appendChild(rowEl);
     });
+    updateBoardPermissionsUI();
+    renderUnvotedBank();
   }
 
   function renderBank() {
@@ -196,11 +369,39 @@
     updateEmptyBankMessage();
   }
 
+  function renderUnvotedBank() {
+    if (!unvotedBankContainer) return;
+    const msg = unvotedBankContainer.querySelector(".empty-unvoted-msg");
+    unvotedBankContainer.innerHTML = "";
+    if (msg) unvotedBankContainer.appendChild(msg);
+
+    unvotedBankData.forEach(item => {
+      const imgEl = createItemElement(item);
+      unvotedBankContainer.appendChild(imgEl);
+    });
+
+    updateEmptyUnvotedMessage();
+  }
+
   function updateEmptyBankMessage() {
     const msg = bankContainer.querySelector(".empty-bank-msg");
     const itemElements = bankContainer.querySelectorAll(".tier-item-img");
     if (msg) {
       msg.style.display = itemElements.length === 0 ? "block" : "none";
+    }
+  }
+
+  function updateEmptyUnvotedMessage() {
+    if (!unvotedBankContainer) return;
+    const msg = unvotedBankContainer.querySelector(".empty-unvoted-msg");
+    const itemElements = unvotedBankContainer.querySelectorAll(".tier-item-img");
+    const count = itemElements.length;
+
+    if (msg) {
+      msg.style.display = count === 0 ? "block" : "none";
+    }
+    if (unvotedBankCountEl) {
+      unvotedBankCountEl.textContent = `(${count} ${count === 1 ? 'item' : 'itens'})`;
     }
   }
 
@@ -340,6 +541,12 @@
   async function submitItemRating(itemId, score) {
     if (!activeBoardId || !itemId) return;
 
+    if (!canUserVoteOnActiveBoard()) {
+      const creatorName = activeBoardCreatedBy || "o criador";
+      alert(`Apenas o criador deste tabuleiro (${creatorName}) pode votar nele.`);
+      return;
+    }
+
     const sessionUser = localStorage.getItem("roleta-nmdp-session") || "Anônimo";
     const recordId = `rate-${activeBoardId}-${itemId}-${sessionUser.toLowerCase().replace(/\s+/g, '_')}`;
 
@@ -352,8 +559,28 @@
       activeBoardRatings[itemId].push({ userName: sessionUser, score });
     }
 
+    // Check if item is in unvotedBankData and move it to Tier List
+    const unvotedIdx = unvotedBankData.findIndex(item => item.id === itemId);
+    if (unvotedIdx >= 0) {
+      const itemToMove = unvotedBankData.splice(unvotedIdx, 1)[0];
+      const numRows = tiersData.length || 1;
+      let targetRowIndex = numRows - 1;
+
+      if (score >= 9.0) targetRowIndex = 0;
+      else if (score >= 7.5) targetRowIndex = Math.min(1, numRows - 1);
+      else if (score >= 5.5) targetRowIndex = Math.min(2, numRows - 1);
+      else if (score >= 3.5) targetRowIndex = Math.min(3, numRows - 1);
+      else targetRowIndex = numRows - 1;
+
+      if (tiersData[targetRowIndex]) {
+        tiersData[targetRowIndex].items.push(itemToMove);
+      }
+    }
+
     // 2. Auto re-sort board items across rows and within rows based on average scores (0-10 scale)
     applyFeaturedAutoSorting();
+    renderBoard();
+    renderUnvotedBank();
     saveBoardState();
 
     // 3. Save to Supabase featured_ratings table
@@ -370,14 +597,68 @@
       } catch (err) {
         console.warn("Erro ao salvar nota em featured_ratings:", err);
       }
-
-      // Save updated board state to Supabase
-      saveBoardToCollection();
     }
   }
 
+  async function removeUserItemRating(itemId, targetUserName) {
+    if (!activeBoardId || !itemId || !targetUserName) return;
+
+    const isLele = loadSessionUser().toLowerCase() === "lele";
+    const currentSessionUser = loadSessionUser().toLowerCase();
+
+    if (!isLele && currentSessionUser !== targetUserName.toLowerCase()) {
+      alert("Apenas o usuário 'lele' pode remover votos de outros usuários.");
+      return;
+    }
+
+    const confirmRemove = confirm(`Deseja remover o voto de "${targetUserName}" para este item?`);
+    if (!confirmRemove) return;
+
+    // 1. Remove from local memory activeBoardRatings
+    if (activeBoardRatings[itemId]) {
+      activeBoardRatings[itemId] = activeBoardRatings[itemId].filter(
+        r => (r.userName || "").toLowerCase() !== targetUserName.toLowerCase()
+      );
+      if (activeBoardRatings[itemId].length === 0) {
+        delete activeBoardRatings[itemId];
+      }
+    }
+
+    // 2. Remove from Supabase featured_ratings table
+    if (supabase) {
+      try {
+        const recordId = `rate-${activeBoardId}-${itemId}-${targetUserName.toLowerCase().replace(/\s+/g, '_')}`;
+        const { error } = await supabase
+          .from("featured_ratings")
+          .delete()
+          .eq("id", recordId);
+
+        if (error) {
+          await supabase
+            .from("featured_ratings")
+            .delete()
+            .eq("board_id", activeBoardId)
+            .eq("item_id", itemId)
+            .ilike("user_name", targetUserName);
+        }
+      } catch (err) {
+        console.warn("Erro ao remover voto de featured_ratings:", err);
+      }
+    }
+
+    // 3. Re-sort if featured, save state and re-render board
+    if (activeBoardIsFeatured) {
+      applyFeaturedAutoSorting();
+    } else {
+      renderBoard();
+    }
+    saveBoardState();
+
+    alert(`Voto de "${targetUserName}" foi removido com sucesso!`);
+  }
+
   function applyFeaturedAutoSorting() {
-    // Collect all placed items
+    // Collect all placed items and unvoted bank items
     const allPlacedItems = [];
     tiersData.forEach(tier => {
       if (Array.isArray(tier.items)) {
@@ -385,30 +666,37 @@
       }
     });
 
+    if (Array.isArray(unvotedBankData)) {
+      allPlacedItems.push(...unvotedBankData);
+    }
+
     if (allPlacedItems.length === 0) return;
 
-    // Clear items from tiers
+    // Clear items from tiers and unvoted bank
     tiersData.forEach(tier => {
       tier.items = [];
     });
+    unvotedBankData = [];
 
     const numRows = tiersData.length;
 
-    // Distribute items into tier rows based on 0-10 average rating thresholds
+    // Distribute items into tier rows if voted, or into unvotedBankData if 0 votes
     allPlacedItems.forEach(item => {
       const stats = getItemRatingStats(item.id);
-      let targetRowIndex = numRows - 1; // Default to lowest tier
-
       if (stats.count > 0) {
+        let targetRowIndex = numRows - 1; // Default to lowest tier
         if (stats.avg >= 9.0) targetRowIndex = 0;
         else if (stats.avg >= 7.5) targetRowIndex = Math.min(1, numRows - 1);
         else if (stats.avg >= 5.5) targetRowIndex = Math.min(2, numRows - 1);
         else if (stats.avg >= 3.5) targetRowIndex = Math.min(3, numRows - 1);
         else targetRowIndex = numRows - 1;
-      }
 
-      if (tiersData[targetRowIndex]) {
-        tiersData[targetRowIndex].items.push(item);
+        if (tiersData[targetRowIndex]) {
+          tiersData[targetRowIndex].items.push(item);
+        }
+      } else {
+        // 0 votes -> place in unvotedBankData
+        unvotedBankData.push(item);
       }
     });
 
@@ -425,10 +713,17 @@
     });
 
     renderBoard();
+    renderUnvotedBank();
   }
 
   function openInlineRatingCard(item, targetImgElement) {
     if (!item || !inlineRatingCard) return;
+
+    if (!canUserVoteOnActiveBoard()) {
+      const creatorName = activeBoardCreatedBy || "o criador";
+      alert(`Apenas o criador deste tabuleiro (${creatorName}) pode votar nele.`);
+      return;
+    }
     activeRatingItem = item;
 
     if (inlineRatingItemTitle) {
@@ -463,6 +758,65 @@
 
       inlineRatingCard.style.left = `${left}px`;
       inlineRatingCard.style.top = `${top}px`;
+    }
+
+    // Render list of votes with delete option for lele
+    let votesListContainer = document.getElementById("inline-rating-votes-list");
+    if (!votesListContainer) {
+      votesListContainer = document.createElement("div");
+      votesListContainer.id = "inline-rating-votes-list";
+      votesListContainer.style.marginTop = "0.75rem";
+      votesListContainer.style.borderTop = "1px solid var(--border)";
+      votesListContainer.style.paddingTop = "0.5rem";
+      votesListContainer.style.fontSize = "0.75rem";
+      votesListContainer.style.maxHeight = "120px";
+      votesListContainer.style.overflowY = "auto";
+      inlineRatingCard.appendChild(votesListContainer);
+    }
+
+    const isLele = loadSessionUser().toLowerCase() === "lele";
+    votesListContainer.innerHTML = "";
+
+    if (ratings.length > 0) {
+      const header = document.createElement("div");
+      header.style.fontWeight = "700";
+      header.style.marginBottom = "0.35rem";
+      header.style.color = "var(--text-muted)";
+      header.textContent = "Votos Registrados:";
+      votesListContainer.appendChild(header);
+
+      ratings.forEach(r => {
+        const row = document.createElement("div");
+        row.style.display = "flex";
+        row.style.justifyContent = "space-between";
+        row.style.alignItems = "center";
+        row.style.marginBottom = "0.25rem";
+
+        const text = document.createElement("span");
+        text.innerHTML = `👤 <strong>${r.userName}</strong>: ⭐ ${r.score}/10`;
+        row.appendChild(text);
+
+        if (isLele) {
+          const delBtn = document.createElement("button");
+          delBtn.type = "button";
+          delBtn.textContent = "🗑️";
+          delBtn.title = `Remover voto de ${r.userName}`;
+          delBtn.className = "btn-danger-sm";
+          delBtn.style.padding = "0.1rem 0.35rem";
+          delBtn.style.fontSize = "0.65rem";
+          delBtn.style.borderRadius = "4px";
+
+          delBtn.addEventListener("click", async (e) => {
+            e.stopPropagation();
+            closeInlineRatingCard();
+            await removeUserItemRating(item.id, r.userName);
+          });
+
+          row.appendChild(delBtn);
+        }
+
+        votesListContainer.appendChild(row);
+      });
     }
 
     inlineRatingCard.style.display = "flex";
@@ -520,7 +874,7 @@
     const itemRatings = activeBoardRatings[item.id] || [];
     const hasVoted = itemRatings.some(r => (r.userName || "").toLowerCase() === sessionUser);
 
-    if (!hasVoted) {
+    if (!hasVoted && canUserVoteOnActiveBoard()) {
       const badge = document.createElement("span");
       badge.className = "unvoted-warning-badge";
       badge.title = "Você ainda não avaliou este item!";
@@ -533,6 +887,11 @@
     // Click on item inside tier list row opens Floating Inline Rating Card Popover
     img.addEventListener("click", (e) => {
       e.stopPropagation();
+      if (!canUserVoteOnActiveBoard()) {
+        const creatorName = activeBoardCreatedBy || "o criador";
+        alert(`Apenas o criador deste tabuleiro (${creatorName}) pode votar nele.`);
+        return;
+      }
       openInlineRatingCard(item, img);
     });
 
@@ -543,6 +902,10 @@
 
   function setupDragEvents(el) {
     el.addEventListener("dragstart", (e) => {
+      if (!canUserVoteOnActiveBoard()) {
+        e.preventDefault();
+        return false;
+      }
       draggedEl = el;
       el.classList.add("dragging");
       e.dataTransfer.setData("text/plain", el.dataset.id);
@@ -580,16 +943,52 @@
         if (imageHoverPreviewRatingBox && hoverAvgRating && hoverUserRatingsList) {
           imageHoverPreviewRatingBox.style.display = "block";
           if (stats.count > 0) {
+            const isLeleHover = loadSessionUser().toLowerCase() === "lele";
             hoverAvgRating.innerHTML = `⭐ Média: <strong>${stats.avg} / 10</strong> (${stats.count} ${stats.count === 1 ? 'voto' : 'votos'})`;
-            hoverUserRatingsList.innerHTML = stats.ratings.map(r => `
-              <div class="hover-rating-item">
-                <span>👤 <strong>${r.userName}</strong></span>
-                <span style="color:#ffd700; font-weight:bold;">⭐ ${r.score}/10</span>
-              </div>
-            `).join("");
+            hoverUserRatingsList.innerHTML = "";
+            
+            stats.ratings.forEach(r => {
+              const itemDiv = document.createElement("div");
+              itemDiv.className = "hover-rating-item";
+              itemDiv.style.display = "flex";
+              itemDiv.style.justifyContent = "space-between";
+              itemDiv.style.alignItems = "center";
+
+              const infoSpan = document.createElement("span");
+              infoSpan.innerHTML = `👤 <strong>${r.userName}</strong>: <span style="color:#ffd700; font-weight:bold;">⭐ ${r.score}/10</span>`;
+              itemDiv.appendChild(infoSpan);
+
+              if (isLeleHover) {
+                const delBtn = document.createElement("button");
+                delBtn.type = "button";
+                delBtn.textContent = "❌";
+                delBtn.title = `Remover voto de ${r.userName}`;
+                delBtn.style.background = "none";
+                delBtn.style.border = "none";
+                delBtn.style.color = "#ff4d4d";
+                delBtn.style.cursor = "pointer";
+                delBtn.style.fontSize = "0.75rem";
+                delBtn.style.padding = "0 0.2rem";
+
+                delBtn.addEventListener("click", async (e) => {
+                  e.stopPropagation();
+                  await removeUserItemRating(itemId, r.userName);
+                  hideHoverPreview();
+                });
+
+                itemDiv.appendChild(delBtn);
+              }
+
+              hoverUserRatingsList.appendChild(itemDiv);
+            });
           } else {
             hoverAvgRating.innerHTML = `⭐ <em>Sem avaliações ainda</em>`;
-            hoverUserRatingsList.innerHTML = `<span style="text-align:center; font-style:italic; font-size: 0.7rem;">Clique no item para dar sua nota!</span>`;
+            if (canUserVoteOnActiveBoard()) {
+              hoverUserRatingsList.innerHTML = `<span style="text-align:center; font-style:italic; font-size: 0.7rem;">Clique no item para dar sua nota!</span>`;
+            } else {
+              const creatorName = activeBoardCreatedBy || "o criador";
+              hoverUserRatingsList.innerHTML = `<span style="text-align:center; font-style:italic; font-size: 0.7rem;">Apenas o criador (${creatorName}) pode votar neste tabuleiro.</span>`;
+            }
           }
         }
 
@@ -638,6 +1037,7 @@
   function setupDropzoneEvents(zone) {
     zone.addEventListener("dragover", (e) => {
       e.preventDefault();
+      if (!canUserVoteOnActiveBoard()) return;
       zone.classList.add("drag-over");
 
       // Implement inline sorting placement
@@ -653,6 +1053,7 @@
 
     zone.addEventListener("dragenter", (e) => {
       e.preventDefault();
+      if (!canUserVoteOnActiveBoard()) return;
       zone.classList.add("drag-over");
     });
 
@@ -663,6 +1064,7 @@
     zone.addEventListener("drop", (e) => {
       e.preventDefault();
       zone.classList.remove("drag-over");
+      if (!canUserVoteOnActiveBoard()) return;
 
       if (draggedEl) {
         const afterElement = getDragAfterElement(zone, e.clientX);
@@ -1090,6 +1492,12 @@
       return;
     }
 
+    if (!canUserEditActiveBoard()) {
+      const creatorName = activeBoardCreatedBy || "o criador";
+      alert(`Apenas o criador deste tabuleiro (${creatorName}) pode salvá-lo.`);
+      return;
+    }
+
     // 1. Gather Tiers state
     const tiers = [];
     const row_metadata = [];
@@ -1157,7 +1565,7 @@
         }
       }
 
-      // Preserve featured status and activeBoardRatings inside row_metadata array
+      // Preserve featured status, ratings, and unvotedBank inside row_metadata array
       if (activeBoardIsFeatured) {
         row_metadata.push({
           is_featured: true,
@@ -1169,14 +1577,23 @@
         });
       }
 
+      if (Array.isArray(unvotedBankData) && unvotedBankData.length > 0) {
+        row_metadata.push({
+          unvoted_bank: unvotedBankData
+        });
+      }
+
       saveBoardBtn.textContent = "Salvando...";
 
       const userName = localStorage.getItem("roleta-nmdp-session") || "Anônimo";
+      if (!activeBoardCreatedBy) {
+        activeBoardCreatedBy = userName;
+      }
 
       const upsertPayload = {
         id: activeBoardId,
         title: boardTitle,
-        created_by: userName,
+        created_by: activeBoardCreatedBy,
         tiers: tiers,
         bank: bank,
         row_metadata: row_metadata,
@@ -1466,8 +1883,13 @@
 
         footerEl.appendChild(metaInfo);
 
-        // EXCLUSIVE ACTION FOR USER "lele": Feature / Unfeature Button
+        // EXCLUSIVE ACTION FOR USER "lele": Feature & Change Owner Buttons
         if (isLeleUser) {
+          const btnGroup = document.createElement("div");
+          btnGroup.style.display = "flex";
+          btnGroup.style.gap = "0.4rem";
+          btnGroup.style.alignItems = "center";
+
           const featureBtn = document.createElement("button");
           featureBtn.type = "button";
           if (isFeaturedCard) {
@@ -1518,7 +1940,53 @@
             }
           });
 
-          footerEl.appendChild(featureBtn);
+          const changeOwnerBtnCard = document.createElement("button");
+          changeOwnerBtnCard.type = "button";
+          changeOwnerBtnCard.textContent = "👤 Alterar Criador";
+          changeOwnerBtnCard.className = "btn-secondary";
+          changeOwnerBtnCard.style.padding = "0.25rem 0.6rem";
+          changeOwnerBtnCard.style.fontSize = "0.75rem";
+
+          changeOwnerBtnCard.addEventListener("click", async (e) => {
+            e.stopPropagation();
+            const currentOwner = board.created_by || "Anônimo";
+            const newOwner = prompt(`Alterar o criador do tabuleiro "${board.title || 'Sem Título'}":`, currentOwner);
+            if (newOwner === null) return;
+            const cleanNewOwner = newOwner.trim();
+            if (!cleanNewOwner) {
+              alert("O nome do criador não pode ser vazio.");
+              return;
+            }
+
+            changeOwnerBtnCard.disabled = true;
+            changeOwnerBtnCard.textContent = "Salvando...";
+
+            try {
+              const { error: updateErr } = await supabase
+                .from("tier_lists")
+                .update({ created_by: cleanNewOwner })
+                .eq("id", board.id);
+
+              if (updateErr) throw updateErr;
+
+              if (board.id === activeBoardId) {
+                activeBoardCreatedBy = cleanNewOwner;
+              }
+
+              alert(`Criador do tabuleiro "${board.title}" alterado para: ${cleanNewOwner}`);
+              renderSavedBoards();
+            } catch (err) {
+              console.error("Erro ao alterar criador:", err);
+              alert("Erro ao alterar criador: " + (err.message || err));
+            } finally {
+              changeOwnerBtnCard.disabled = false;
+              changeOwnerBtnCard.textContent = "👤 Alterar Criador";
+            }
+          });
+
+          btnGroup.appendChild(featureBtn);
+          btnGroup.appendChild(changeOwnerBtnCard);
+          footerEl.appendChild(btnGroup);
         }
 
         card.appendChild(footerEl);
@@ -1534,7 +2002,7 @@
           try {
             const { data: details, error: detailsError } = await supabase
               .from("tier_lists")
-              .select("tiers, bank")
+              .select("tiers, bank, created_by, row_metadata")
               .eq("id", board.id)
               .single();
 
@@ -1542,15 +2010,23 @@
 
             activeBoardId = board.id;
             boardTitle = board.title;
-            activeBoardIsFeatured = isFeaturedCard || isBoardFeatured(board);
+            activeBoardIsFeatured = isFeaturedCard || isBoardFeatured(details) || isBoardFeatured(board);
+            activeBoardCreatedBy = details.created_by || board.created_by || "Anônimo";
             tiersData = JSON.parse(JSON.stringify(details.tiers || []));
             bankData = JSON.parse(JSON.stringify(details.bank || []));
+
+            let embeddedUnvoted = [];
+            if (Array.isArray(details.row_metadata)) {
+              const metaObj = details.row_metadata.find(m => m && m.unvoted_bank !== undefined);
+              if (metaObj && metaObj.unvoted_bank) {
+                embeddedUnvoted = metaObj.unvoted_bank;
+              }
+            }
+            unvotedBankData = JSON.parse(JSON.stringify(embeddedUnvoted || []));
             activeEditing = true;
 
             await loadFeaturedBoardRatings(board.id, board.row_metadata);
-            if (activeBoardIsFeatured) {
-              applyFeaturedAutoSorting();
-            }
+            applyFeaturedAutoSorting();
 
             activeTierlistTitle.textContent = boardTitle;
             renderBoard();
@@ -1561,7 +2037,7 @@
             landingWrapper.style.display = "none";
             editScreen.style.display = "flex";
 
-            deleteBoardBtn.style.display = "inline-block";
+            updateBoardPermissionsUI();
           } catch (err) {
             console.error("Erro ao carregar detalhes:", err);
             const errMsg = err.message || err.details || (typeof err === "object" ? JSON.stringify(err) : err);
@@ -1666,6 +2142,8 @@ CREATE POLICY "Allow delete" ON public.tier_lists FOR DELETE USING (true);</pre>
 
       // Reset editor session
       activeBoardId = null;
+      activeBoardIsFeatured = false;
+      activeBoardCreatedBy = null;
       activeEditing = false;
       boardTitle = "Minha Tier List";
       tiersData = JSON.parse(JSON.stringify(DEFAULT_TIERS));
@@ -1689,6 +2167,49 @@ CREATE POLICY "Allow delete" ON public.tier_lists FOR DELETE USING (true);</pre>
     }
   });
 
+  const changeOwnerBtn = document.getElementById("change-owner-btn");
+  if (changeOwnerBtn) {
+    changeOwnerBtn.addEventListener("click", async () => {
+      if (!canUserEditActiveBoard()) return;
+      if (!activeBoardId) return;
+
+      const currentOwner = activeBoardCreatedBy || "Anônimo";
+      const newOwner = prompt(`Alterar o criador deste tabuleiro ("${boardTitle}"):`, currentOwner);
+      if (newOwner === null) return;
+      const cleanNewOwner = newOwner.trim();
+      if (!cleanNewOwner) {
+        alert("O nome do criador não pode ser vazio.");
+        return;
+      }
+
+      changeOwnerBtn.disabled = true;
+      changeOwnerBtn.textContent = "Salvando...";
+
+      try {
+        if (supabase) {
+          const { error } = await supabase
+            .from("tier_lists")
+            .update({ created_by: cleanNewOwner })
+            .eq("id", activeBoardId);
+          if (error) throw error;
+        }
+
+        activeBoardCreatedBy = cleanNewOwner;
+        saveBoardState();
+        alert(`Criador do tabuleiro alterado com sucesso para: ${cleanNewOwner}`);
+
+        renderSavedBoards();
+        updateBoardPermissionsUI();
+      } catch (err) {
+        console.error("Erro ao alterar criador:", err);
+        alert("Erro ao alterar criador no banco: " + (err.message || err));
+      } finally {
+        changeOwnerBtn.disabled = false;
+        changeOwnerBtn.textContent = "👤 Alterar Criador";
+      }
+    });
+  }
+
   // --- Setup Landing Screen Events ---
 
   toggleSetupBtn.addEventListener("click", () => {
@@ -1709,6 +2230,8 @@ CREATE POLICY "Allow delete" ON public.tier_lists FOR DELETE USING (true);</pre>
 
     // A fresh board creation reset
     activeBoardId = null;
+    activeBoardIsFeatured = false;
+    activeBoardCreatedBy = localStorage.getItem("roleta-nmdp-session") || "Anônimo";
     deleteBoardBtn.style.display = "none";
 
     // Template selection
@@ -1778,6 +2301,8 @@ CREATE POLICY "Allow delete" ON public.tier_lists FOR DELETE USING (true);</pre>
 
       activeEditing = false;
       activeBoardId = null;
+      activeBoardIsFeatured = false;
+      activeBoardCreatedBy = null;
       boardTitle = "Minha Tier List";
       tiersData = JSON.parse(JSON.stringify(DEFAULT_TIERS));
       bankData = [];
@@ -1806,6 +2331,7 @@ CREATE POLICY "Allow delete" ON public.tier_lists FOR DELETE USING (true);</pre>
 
   function init() {
     loadBoardState();
+    updateUserSessionUI();
     
     if (activeEditing) {
       landingWrapper.style.display = "none";
@@ -1813,6 +2339,7 @@ CREATE POLICY "Allow delete" ON public.tier_lists FOR DELETE USING (true);</pre>
       activeTierlistTitle.textContent = boardTitle;
       renderBoard();
       renderBank();
+      renderUnvotedBank();
       
       if (activeBoardId) {
         deleteBoardBtn.style.display = "inline-block";
@@ -1826,6 +2353,9 @@ CREATE POLICY "Allow delete" ON public.tier_lists FOR DELETE USING (true);</pre>
     }
 
     setupDropzoneEvents(bankContainer);
+    if (unvotedBankContainer) {
+      setupDropzoneEvents(unvotedBankContainer);
+    }
   }
 
   init();
