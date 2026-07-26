@@ -538,6 +538,84 @@
     }
   }
 
+  function showAutoSaveToast(message) {
+    let toast = document.getElementById("autosave-toast");
+    if (!toast) {
+      toast = document.createElement("div");
+      toast.id = "autosave-toast";
+      toast.style.position = "fixed";
+      toast.style.bottom = "20px";
+      toast.style.right = "20px";
+      toast.style.backgroundColor = "rgba(46, 204, 113, 0.95)";
+      toast.style.color = "#fff";
+      toast.style.padding = "10px 18px";
+      toast.style.borderRadius = "8px";
+      toast.style.boxShadow = "0 4px 15px rgba(0,0,0,0.4)";
+      toast.style.fontSize = "0.9rem";
+      toast.style.fontWeight = "600";
+      toast.style.zIndex = "10000";
+      toast.style.transition = "opacity 0.3s ease, transform 0.3s ease";
+      toast.style.opacity = "0";
+      toast.style.transform = "translateY(10px)";
+      toast.style.pointerEvents = "none";
+      document.body.appendChild(toast);
+    }
+
+    toast.textContent = message;
+    toast.style.opacity = "1";
+    toast.style.transform = "translateY(0)";
+
+    setTimeout(() => {
+      toast.style.opacity = "0";
+      toast.style.transform = "translateY(10px)";
+    }, 2500);
+  }
+
+  async function autoSaveFeaturedBoard() {
+    if (!supabase || !activeBoardId || !activeBoardIsFeatured) return;
+
+    try {
+      const row_metadata = [];
+      tiersData.forEach(tier => {
+        row_metadata.push({
+          name: tier.name,
+          color: tier.color,
+          count: (tier.items || []).length
+        });
+      });
+
+      row_metadata.push({
+        is_featured: true,
+        ratings: activeBoardRatings
+      });
+
+      if (Array.isArray(unvotedBankData) && unvotedBankData.length > 0) {
+        row_metadata.push({
+          unvoted_bank: unvotedBankData
+        });
+      }
+
+      const upsertPayload = {
+        id: activeBoardId,
+        title: boardTitle,
+        created_by: activeBoardCreatedBy || "Global",
+        tiers: tiersData,
+        bank: bankData,
+        row_metadata: row_metadata,
+        updated_at: new Date().toISOString()
+      };
+
+      const { error } = await supabase.from("tier_lists").upsert(upsertPayload);
+      if (error) {
+        console.warn("Erro ao auto-salvar tabuleiro em destaque no Supabase:", error);
+      } else {
+        showAutoSaveToast("⭐ Voto e tabuleiro salvos automaticamente!");
+      }
+    } catch (err) {
+      console.warn("Erro ao auto-salvar tabuleiro em destaque:", err);
+    }
+  }
+
   async function submitItemRating(itemId, score) {
     if (!activeBoardId || !itemId) return;
 
@@ -547,12 +625,23 @@
       return;
     }
 
-    const sessionUser = localStorage.getItem("roleta-nmdp-session") || "Anônimo";
+    let sessionUser = loadSessionUser();
+    if (!sessionUser) {
+      sessionUser = prompt("Digite seu nome para registrar seu voto no tabuleiro:") || "";
+      sessionUser = sessionUser.trim();
+      if (!sessionUser) {
+        alert("Você precisa informar seu nome para votar.");
+        return;
+      }
+      localStorage.setItem(SESSION_STORAGE_KEY, sessionUser);
+      updateUserSessionUI();
+    }
+
     const recordId = `rate-${activeBoardId}-${itemId}-${sessionUser.toLowerCase().replace(/\s+/g, '_')}`;
 
     // 1. Update local state
     if (!activeBoardRatings[itemId]) activeBoardRatings[itemId] = [];
-    const existingIdx = activeBoardRatings[itemId].findIndex(r => r.userName.toLowerCase() === sessionUser.toLowerCase());
+    const existingIdx = activeBoardRatings[itemId].findIndex(r => (r.userName || "").toLowerCase() === sessionUser.toLowerCase());
     if (existingIdx >= 0) {
       activeBoardRatings[itemId][existingIdx].score = score;
     } else {
@@ -583,7 +672,7 @@
     renderUnvotedBank();
     saveBoardState();
 
-    // 3. Save to Supabase featured_ratings table
+    // 3. Save to Supabase featured_ratings table & auto-save board state
     if (supabase) {
       try {
         await supabase.from("featured_ratings").upsert({
@@ -596,6 +685,10 @@
         });
       } catch (err) {
         console.warn("Erro ao salvar nota em featured_ratings:", err);
+      }
+
+      if (activeBoardIsFeatured) {
+        await autoSaveFeaturedBoard();
       }
     }
   }
@@ -649,6 +742,9 @@
     // 3. Re-sort if featured, save state and re-render board
     if (activeBoardIsFeatured) {
       applyFeaturedAutoSorting();
+      if (supabase) {
+        await autoSaveFeaturedBoard();
+      }
     } else {
       renderBoard();
     }
@@ -1600,10 +1696,6 @@
         updated_at: new Date().toISOString()
       };
 
-      if (activeBoardIsFeatured) {
-        upsertPayload.is_featured = true;
-      }
-
       const { error } = await supabase.from("tier_lists").upsert(upsertPayload);
 
       if (error) throw error;
@@ -2025,7 +2117,7 @@
             unvotedBankData = JSON.parse(JSON.stringify(embeddedUnvoted || []));
             activeEditing = true;
 
-            await loadFeaturedBoardRatings(board.id, board.row_metadata);
+            await loadFeaturedBoardRatings(board.id, details.row_metadata);
             applyFeaturedAutoSorting();
 
             activeTierlistTitle.textContent = boardTitle;
@@ -2329,7 +2421,7 @@ CREATE POLICY "Allow delete" ON public.tier_lists FOR DELETE USING (true);</pre>
 
   // --- Initialization ---
 
-  function init() {
+  async function init() {
     loadBoardState();
     updateUserSessionUI();
     
@@ -2337,6 +2429,36 @@ CREATE POLICY "Allow delete" ON public.tier_lists FOR DELETE USING (true);</pre>
       landingWrapper.style.display = "none";
       editScreen.style.display = "flex";
       activeTierlistTitle.textContent = boardTitle;
+
+      if (activeBoardId && activeBoardIsFeatured && supabase) {
+        try {
+          const { data: details } = await supabase
+            .from("tier_lists")
+            .select("tiers, bank, created_by, row_metadata")
+            .eq("id", activeBoardId)
+            .single();
+
+          if (details) {
+            if (Array.isArray(details.tiers)) tiersData = JSON.parse(JSON.stringify(details.tiers));
+            if (Array.isArray(details.bank)) bankData = JSON.parse(JSON.stringify(details.bank));
+
+            let embeddedUnvoted = [];
+            if (Array.isArray(details.row_metadata)) {
+              const metaObj = details.row_metadata.find(m => m && m.unvoted_bank !== undefined);
+              if (metaObj && metaObj.unvoted_bank) {
+                embeddedUnvoted = metaObj.unvoted_bank;
+              }
+            }
+            unvotedBankData = JSON.parse(JSON.stringify(embeddedUnvoted || []));
+
+            await loadFeaturedBoardRatings(activeBoardId, details.row_metadata);
+            applyFeaturedAutoSorting();
+          }
+        } catch (e) {
+          console.warn("Erro ao recarregar dados do tabuleiro em destaque no init:", e);
+        }
+      }
+
       renderBoard();
       renderBank();
       renderUnvotedBank();
