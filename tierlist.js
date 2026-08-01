@@ -25,13 +25,22 @@
 
   // Default rows structure
   const DEFAULT_TIERS = [
-    { id: "row-s", name: "S", color: "#ff7f7f", items: [] },
-    { id: "row-a", name: "A", color: "#ffbf7f", items: [] },
-    { id: "row-b", name: "B", color: "#ffdf7f", items: [] },
-    { id: "row-c", name: "C", color: "#ffff7f", items: [] },
-    { id: "row-d", name: "D", color: "#7fff7f", items: [] },
-    { id: "row-f", name: "F", color: "#7fbbff", items: [] }
+    { id: "row-s", name: "S", color: "#ff7f7f", minScore: 9.0, items: [] },
+    { id: "row-a", name: "A", color: "#ffbf7f", minScore: 7.5, items: [] },
+    { id: "row-b", name: "B", color: "#ffdf7f", minScore: 5.5, items: [] },
+    { id: "row-c", name: "C", color: "#ffff7f", minScore: 3.5, items: [] },
+    { id: "row-d", name: "D", color: "#7fff7f", minScore: 1.5, items: [] },
+    { id: "row-f", name: "F", color: "#7fbbff", minScore: 0.0, items: [] }
   ];
+
+  function getRowMinScore(tier, index, totalRows) {
+    if (tier && typeof tier.minScore === "number" && !isNaN(tier.minScore)) {
+      return tier.minScore;
+    }
+    const defaults = [9.0, 7.5, 5.5, 3.5, 1.5, 0.0];
+    if (typeof index === "number" && index < defaults.length) return defaults[index];
+    return 0.0;
+  }
 
   const SAVED_COLLECTION_KEY = "roleta-nmdp-saved-tierlists";
 
@@ -181,6 +190,7 @@
     const clearAllBtn = document.getElementById("clear-all-btn");
     const deleteBoardBtn = document.getElementById("delete-board-btn");
     const changeOwnerBtn = document.getElementById("change-owner-btn");
+    const openThresholdsBtn = document.getElementById("open-thresholds-modal-btn");
 
     if (saveBoardBtn) saveBoardBtn.style.display = canEdit ? "inline-block" : "none";
     if (addRowBtn) addRowBtn.style.display = canEdit ? "inline-block" : "none";
@@ -189,6 +199,7 @@
     if (clearAllBtn) clearAllBtn.style.display = canEdit ? "inline-block" : "none";
     if (deleteBoardBtn) deleteBoardBtn.style.display = (canEdit && activeBoardId) ? "inline-block" : "none";
     if (changeOwnerBtn) changeOwnerBtn.style.display = (canEdit && activeBoardId) ? "inline-block" : "none";
+    if (openThresholdsBtn) openThresholdsBtn.style.display = canEdit ? "inline-block" : "none";
 
     // Row controls visibility (only 'lele' can edit rows)
     document.querySelectorAll(".btn-tier-ctrl, .tier-controls").forEach(ctrl => {
@@ -263,8 +274,12 @@
     document.querySelectorAll(".tier-row").forEach(row => {
       const rowId = row.dataset.id;
       const labelEl = row.querySelector(".tier-label");
-      const labelName = labelEl.textContent.trim();
+      const nameSpan = labelEl.querySelector("span");
+      const labelName = nameSpan ? nameSpan.textContent.trim() : labelEl.textContent.trim();
       const color = labelEl.dataset.color;
+
+      const existingTier = tiersData.find(t => t.id === rowId);
+      const minScore = (existingTier && typeof existingTier.minScore === "number") ? existingTier.minScore : undefined;
 
       const items = [];
       row.querySelectorAll(".tier-item-img").forEach(img => {
@@ -279,6 +294,7 @@
         id: rowId,
         name: labelName,
         color: color,
+        minScore: minScore,
         items: items
       });
     });
@@ -347,8 +363,8 @@
 
   function renderBoard() {
     boardContainer.innerHTML = "";
-    tiersData.forEach(tier => {
-      const rowEl = createRowElement(tier);
+    tiersData.forEach((tier, index) => {
+      const rowEl = createRowElement(tier, index);
       boardContainer.appendChild(rowEl);
     });
     updateBoardPermissionsUI();
@@ -405,7 +421,7 @@
     }
   }
 
-  function createRowElement(tier) {
+  function createRowElement(tier, index) {
     const row = document.createElement("div");
     row.className = "tier-row";
     row.dataset.id = tier.id;
@@ -416,7 +432,10 @@
     label.textContent = tier.name;
     label.style.backgroundColor = tier.color;
     label.dataset.color = tier.color;
-    label.title = "Clique para configurar a linha";
+
+    const minScoreVal = getRowMinScore(tier, index, tiersData.length);
+    label.title = `Categoria: ${tier.name} (Nota Mínima Requerida: ≥ ${minScoreVal.toFixed(1)})`;
+
     label.addEventListener("click", () => openRowSettings(tier.id));
 
     // Items Zone
@@ -781,11 +800,13 @@
       const stats = getItemRatingStats(item.id);
       if (stats.count > 0) {
         let targetRowIndex = numRows - 1; // Default to lowest tier
-        if (stats.avg >= 9.0) targetRowIndex = 0;
-        else if (stats.avg >= 7.5) targetRowIndex = Math.min(1, numRows - 1);
-        else if (stats.avg >= 5.5) targetRowIndex = Math.min(2, numRows - 1);
-        else if (stats.avg >= 3.5) targetRowIndex = Math.min(3, numRows - 1);
-        else targetRowIndex = numRows - 1;
+        for (let i = 0; i < numRows; i++) {
+          const reqScore = getRowMinScore(tiersData[i], i, numRows);
+          if (stats.avg >= reqScore) {
+            targetRowIndex = i;
+            break;
+          }
+        }
 
         if (tiersData[targetRowIndex]) {
           tiersData[targetRowIndex].items.push(item);
@@ -1214,12 +1235,27 @@
 
   function openRowSettings(rowId) {
     activeEditingRowId = rowId;
+    const tier = tiersData.find(t => t.id === rowId);
     const rowEl = document.querySelector(`.tier-row[data-id="${rowId}"]`);
     if (!rowEl) return;
 
     const labelEl = rowEl.querySelector(".tier-label");
-    rowLabelInput.value = labelEl.textContent.trim();
+    const nameSpan = labelEl.querySelector("span");
+    rowLabelInput.value = nameSpan ? nameSpan.textContent.trim() : labelEl.textContent.trim();
     selectedPresetColor = labelEl.dataset.color || "#95a5a6";
+
+    const minScoreInput = document.getElementById("row-min-score-input");
+    const minScoreGroup = document.getElementById("row-min-score-group");
+    const isLele = canUserEditActiveBoard();
+
+    if (minScoreGroup) {
+      minScoreGroup.style.display = isLele ? "block" : "none";
+    }
+    if (minScoreInput) {
+      const rowIndex = tiersData.findIndex(t => t.id === rowId);
+      const currentMinScore = (tier && typeof tier.minScore === "number") ? tier.minScore : getRowMinScore(tier || {}, rowIndex, tiersData.length);
+      minScoreInput.value = currentMinScore;
+    }
 
     renderColorPresets();
     rowSettingsOverlay.hidden = false;
@@ -1236,16 +1272,146 @@
   saveRowSettingsBtn.addEventListener("click", () => {
     if (!activeEditingRowId) return;
 
+    const tier = tiersData.find(t => t.id === activeEditingRowId);
+    const minScoreInput = document.getElementById("row-min-score-input");
+
+    if (tier && minScoreInput && canUserEditActiveBoard()) {
+      const parsedVal = parseFloat(minScoreInput.value);
+      if (!isNaN(parsedVal)) {
+        tier.minScore = Math.max(0, Math.min(10, parsedVal));
+      }
+    }
+
+    const newTitle = rowLabelInput.value.trim() || "NEW";
+    if (tier) {
+      tier.name = newTitle;
+      tier.color = selectedPresetColor;
+    }
+
     const rowEl = document.querySelector(`.tier-row[data-id="${activeEditingRowId}"]`);
     if (rowEl) {
       const labelEl = rowEl.querySelector(".tier-label");
-      labelEl.textContent = rowLabelInput.value.trim() || "NEW";
-      labelEl.style.backgroundColor = selectedPresetColor;
       labelEl.dataset.color = selectedPresetColor;
-      saveBoardState();
+      labelEl.style.backgroundColor = selectedPresetColor;
     }
+
+    if (activeBoardIsFeatured) {
+      applyFeaturedAutoSorting();
+      if (supabase) autoSaveFeaturedBoard();
+    } else {
+      renderBoard();
+    }
+    saveBoardState();
     closeRowSettings();
   });
+
+  // --- Admin Rating Thresholds Overview Modal ---
+  const openThresholdsModalBtn = document.getElementById("open-thresholds-modal-btn");
+  const thresholdsOverlay = document.getElementById("thresholds-overlay");
+  const thresholdsRowsList = document.getElementById("thresholds-rows-list");
+  const cancelThresholdsBtn = document.getElementById("cancel-thresholds-btn");
+  const saveThresholdsBtn = document.getElementById("save-thresholds-btn");
+
+  function openThresholdsModal() {
+    if (!thresholdsOverlay || !thresholdsRowsList) return;
+    thresholdsRowsList.innerHTML = "";
+
+    tiersData.forEach((tier, idx) => {
+      const rowItem = document.createElement("div");
+      rowItem.style.display = "flex";
+      rowItem.style.alignItems = "center";
+      rowItem.style.justifyContent = "space-between";
+      rowItem.style.padding = "0.6rem 0.8rem";
+      rowItem.style.background = "var(--surface-raised)";
+      rowItem.style.border = "1px solid var(--border)";
+      rowItem.style.borderRadius = "8px";
+      rowItem.style.gap = "0.75rem";
+
+      const left = document.createElement("div");
+      left.style.display = "flex";
+      left.style.alignItems = "center";
+      left.style.gap = "0.6rem";
+
+      const colorBox = document.createElement("div");
+      colorBox.style.width = "24px";
+      colorBox.style.height = "24px";
+      colorBox.style.borderRadius = "4px";
+      colorBox.style.backgroundColor = tier.color || "#95a5a6";
+
+      const label = document.createElement("span");
+      label.style.fontWeight = "700";
+      label.style.fontSize = "0.95rem";
+      label.textContent = tier.name || `Linha ${idx + 1}`;
+
+      left.appendChild(colorBox);
+      left.appendChild(label);
+
+      const right = document.createElement("div");
+      right.style.display = "flex";
+      right.style.alignItems = "center";
+      right.style.gap = "0.4rem";
+
+      const inputLabel = document.createElement("span");
+      inputLabel.style.fontSize = "0.8rem";
+      inputLabel.style.color = "var(--text-muted)";
+      inputLabel.textContent = "Nota Mínima:";
+
+      const numInput = document.createElement("input");
+      numInput.type = "number";
+      numInput.className = "input-text-sm threshold-input";
+      numInput.style.width = "75px";
+      numInput.style.textAlign = "center";
+      numInput.min = "0";
+      numInput.max = "10";
+      numInput.step = "0.1";
+      numInput.dataset.rowId = tier.id;
+      numInput.value = getRowMinScore(tier, idx, tiersData.length);
+
+      right.appendChild(inputLabel);
+      right.appendChild(numInput);
+
+      rowItem.appendChild(left);
+      rowItem.appendChild(right);
+      thresholdsRowsList.appendChild(rowItem);
+    });
+
+    thresholdsOverlay.hidden = false;
+  }
+
+  if (openThresholdsModalBtn) {
+    openThresholdsModalBtn.addEventListener("click", openThresholdsModal);
+  }
+
+  if (cancelThresholdsBtn) {
+    cancelThresholdsBtn.addEventListener("click", () => {
+      if (thresholdsOverlay) thresholdsOverlay.hidden = true;
+    });
+  }
+
+  if (saveThresholdsBtn) {
+    saveThresholdsBtn.addEventListener("click", async () => {
+      const inputs = thresholdsRowsList.querySelectorAll(".threshold-input");
+      inputs.forEach(input => {
+        const rId = input.dataset.rowId;
+        const val = parseFloat(input.value);
+        const tier = tiersData.find(t => t.id === rId);
+        if (tier && !isNaN(val)) {
+          tier.minScore = Math.max(0, Math.min(10, val));
+        }
+      });
+
+      if (thresholdsOverlay) thresholdsOverlay.hidden = true;
+
+      applyFeaturedAutoSorting();
+      saveBoardState();
+
+      if (activeBoardIsFeatured && supabase) {
+        await autoSaveFeaturedBoard();
+      }
+
+      showAutoSaveToast("📊 Requisitos de notas atualizados e tabuleiro re-ordenado!");
+    });
+  }
 
   deleteRowConfirmBtn.addEventListener("click", () => {
     if (!activeEditingRowId) return;
@@ -1600,8 +1766,12 @@
     document.querySelectorAll(".tier-row").forEach(row => {
       const rowId = row.dataset.id;
       const labelEl = row.querySelector(".tier-label");
-      const labelName = labelEl.textContent.trim();
+      const nameSpan = labelEl.querySelector("span");
+      const labelName = nameSpan ? nameSpan.textContent.trim() : labelEl.textContent.trim();
       const color = labelEl.dataset.color;
+
+      const existingTier = tiersData.find(t => t.id === rowId);
+      const minScore = (existingTier && typeof existingTier.minScore === "number") ? existingTier.minScore : undefined;
 
       const items = [];
       row.querySelectorAll(".tier-item-img").forEach(img => {

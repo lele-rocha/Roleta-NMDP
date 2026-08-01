@@ -173,6 +173,7 @@
               <button type="button" id="clear-all-btn" class="btn-danger-sm">🗑️ Limpar Tudo</button>
               <button type="button" id="delete-board-btn" class="btn-danger-sm" style="display: none;" title="Excluir este tabuleiro permanentemente">🗑️ Excluir Tabuleiro</button>
               <button type="button" id="change-owner-btn" class="btn-secondary-sm" style="display: none; background: linear-gradient(135deg, #00b894, #00cec9); color: #fff; font-weight: 700;" title="Alterar o proprietário deste tabuleiro">👤 Alterar Criador</button>
+              <button type="button" id="open-thresholds-modal-btn" class="btn-secondary-sm" style="display: none; background: linear-gradient(135deg, #f1c40f, #e67e22); color: #000; font-weight: 700;" title="Configurar requisitos de notas mínimas para todas as categorias (Admin lele)">📊 Limites de Notas</button>
             </div>
             <div class="tierlist-btn-group">
               <button type="button" id="open-import-modal-btn" class="btn-secondary-sm" style="background: rgba(108, 92, 231, 0.15); border: 1px solid var(--accent); color: var(--text);">📥 Importar da Galeria</button>
@@ -228,6 +229,11 @@
         <input type="text" id="row-label-input" class="input-text" maxlength="80" />
       </div>
 
+      <div class="setting-group" id="row-min-score-group" style="display: none;">
+        <label class="label" for="row-min-score-input">Nota Mínima Requerida (0.0 a 10.0)</label>
+        <input type="number" id="row-min-score-input" class="input-text" min="0" max="10" step="0.1" placeholder="Ex: 8.5" />
+      </div>
+
       <div class="setting-group">
         <label class="label">Cor do Rótulo</label>
         <div class="color-presets-grid" id="color-presets-grid">
@@ -239,6 +245,25 @@
         <button type="button" id="delete-row-confirm-btn" class="btn-danger" style="margin-right: auto;">Excluir Linha</button>
         <button type="button" id="cancel-row-settings-btn" class="btn-secondary">Cancelar</button>
         <button type="button" id="save-row-settings-btn" class="btn-primary">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Admin Rating Thresholds Modal Overlay -->
+  <div class="edit-overlay" id="thresholds-overlay" hidden>
+    <div class="edit-modal" style="max-width: 500px;">
+      <h2 class="edit-modal__title" style="margin-bottom: 0.5rem;">📊 Requisitos de Notas das Linhas (Admin)</h2>
+      <p class="setting-desc" style="margin-bottom: 1.25rem; color: var(--text-muted); font-size: 0.85rem;">
+        Defina a nota média mínima necessária para que uma imagem entre em cada categoria:
+      </p>
+      
+      <div id="thresholds-rows-list" style="display: flex; flex-direction: column; gap: 0.75rem; max-height: 320px; overflow-y: auto; padding-right: 4px; margin-bottom: 1.25rem;">
+        <!-- Populated by JS -->
+      </div>
+
+      <div class="edit-modal__actions" style="display: flex; gap: 0.75rem; justify-content: flex-end;">
+        <button type="button" id="cancel-thresholds-btn" class="btn-secondary">Cancelar</button>
+        <button type="button" id="save-thresholds-btn" class="btn-primary" style="background: linear-gradient(135deg, #f1c40f, #e67e22); color: #000; font-weight: 700;">💾 Aplicar Limites</button>
       </div>
     </div>
   </div>
