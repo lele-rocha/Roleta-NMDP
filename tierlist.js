@@ -61,6 +61,11 @@
   const setupImportVotes = document.getElementById("setup-import-votes");
   const startCreationBtn = document.getElementById("start-creation-btn");
 
+  const setupParamInput = document.getElementById("setup-param-input");
+  const addSetupParamBtn = document.getElementById("add-setup-param-btn");
+  const setupParamsContainer = document.getElementById("setup-params-container");
+  const noParamsMsg = document.getElementById("no-params-msg");
+
   // DOM Edit Selectors
   const activeTierlistTitle = document.getElementById("active-tierlist-title");
   const goBackSetupBtn = document.getElementById("go-back-setup-btn");
@@ -72,6 +77,7 @@
   const deleteBoardBtn = document.getElementById("delete-board-btn");
   const openImportModalBtn = document.getElementById("open-import-modal-btn");
   const downloadPngBtn = document.getElementById("download-png-btn");
+  const editParametersBtn = document.getElementById("edit-parameters-btn");
 
   const addStockImagesBtn = document.getElementById("add-stock-images-btn");
   const fileInputUpload = document.getElementById("tier-image-input");
@@ -89,6 +95,14 @@
   const cancelRowSettingsBtn = document.getElementById("cancel-row-settings-btn");
   const saveRowSettingsBtn = document.getElementById("save-row-settings-btn");
 
+  // Parameters Modal Selectors
+  const parametersOverlay = document.getElementById("parameters-overlay");
+  const modalParamInput = document.getElementById("modal-param-input");
+  const modalAddParamBtn = document.getElementById("modal-add-param-btn");
+  const modalParamsList = document.getElementById("modal-params-list");
+  const cancelParametersBtn = document.getElementById("cancel-parameters-btn");
+  const saveParametersBtn = document.getElementById("save-parameters-btn");
+
   // Import Modal Selectors
   const importOverlay = document.getElementById("import-overlay");
   const cancelImportBtn = document.getElementById("cancel-import-btn");
@@ -105,6 +119,11 @@
   let draggedEl = null;
   let activeEditingRowId = null;
   let selectedPresetColor = "";
+
+  // Parameters State
+  let activeBoardParameters = [];
+  let setupParameters = [];
+  let editingModalParameters = [];
 
   // User Session selectors
   const userLoginForm = document.getElementById("user-login-form");
@@ -191,6 +210,7 @@
     const deleteBoardBtn = document.getElementById("delete-board-btn");
     const changeOwnerBtn = document.getElementById("change-owner-btn");
     const openThresholdsBtn = document.getElementById("open-thresholds-modal-btn");
+    const editParametersBtn = document.getElementById("edit-parameters-btn");
 
     if (saveBoardBtn) saveBoardBtn.style.display = canEdit ? "inline-block" : "none";
     if (addRowBtn) addRowBtn.style.display = canEdit ? "inline-block" : "none";
@@ -200,6 +220,7 @@
     if (deleteBoardBtn) deleteBoardBtn.style.display = (canEdit && activeBoardId) ? "inline-block" : "none";
     if (changeOwnerBtn) changeOwnerBtn.style.display = (canEdit && activeBoardId) ? "inline-block" : "none";
     if (openThresholdsBtn) openThresholdsBtn.style.display = canEdit ? "inline-block" : "none";
+    if (editParametersBtn) editParametersBtn.style.display = canEdit ? "inline-block" : "none";
 
     // Row controls visibility (only 'lele' can edit rows)
     document.querySelectorAll(".btn-tier-ctrl, .tier-controls").forEach(ctrl => {
@@ -321,6 +342,7 @@
     state.activeBoardIsFeatured = activeBoardIsFeatured;
     state.activeBoardCreatedBy = activeBoardCreatedBy;
     state.activeBoardRatings = activeBoardRatings;
+    state.activeBoardParameters = activeBoardParameters;
 
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
@@ -344,6 +366,7 @@
         activeBoardIsFeatured = parsed.activeBoardIsFeatured || false;
         activeBoardCreatedBy = parsed.activeBoardCreatedBy || null;
         activeBoardRatings = parsed.activeBoardRatings || {};
+        activeBoardParameters = parsed.activeBoardParameters || [];
         return;
       } catch (e) {
         console.error("Erro ao ler estado do localStorage:", e);
@@ -352,6 +375,7 @@
     activeBoardIsFeatured = false;
     activeBoardCreatedBy = null;
     activeBoardRatings = {};
+    activeBoardParameters = [];
     activeEditing = false;
     boardTitle = "Minha Tier List";
     tiersData = JSON.parse(JSON.stringify(DEFAULT_TIERS));
@@ -521,11 +545,15 @@
     activeBoardRatings = {};
     if (!boardId) return;
 
-    // 1. Load embedded ratings from rowMetadata array if present
+    // 1. Load embedded ratings & parameters from rowMetadata array if present
     if (Array.isArray(rowMetadata)) {
       const metaRatingsObj = rowMetadata.find(m => m && m.ratings !== undefined);
       if (metaRatingsObj && metaRatingsObj.ratings) {
         activeBoardRatings = JSON.parse(JSON.stringify(metaRatingsObj.ratings));
+      }
+      const metaParamObj = rowMetadata.find(m => m && m.parameters !== undefined);
+      if (metaParamObj && metaParamObj.parameters) {
+        activeBoardParameters = JSON.parse(JSON.stringify(metaParamObj.parameters));
       }
     }
 
@@ -608,6 +636,12 @@
         ratings: activeBoardRatings
       });
 
+      if (Array.isArray(activeBoardParameters) && activeBoardParameters.length > 0) {
+        row_metadata.push({
+          parameters: activeBoardParameters
+        });
+      }
+
       if (Array.isArray(unvotedBankData) && unvotedBankData.length > 0) {
         row_metadata.push({
           unvoted_bank: unvotedBankData
@@ -635,7 +669,7 @@
     }
   }
 
-  async function submitItemRating(itemId, score) {
+  async function submitItemRating(itemId, score, paramScores) {
     if (!activeBoardId || !itemId) return;
 
     if (!canUserVoteOnActiveBoard()) {
@@ -661,10 +695,16 @@
     // 1. Update local state
     if (!activeBoardRatings[itemId]) activeBoardRatings[itemId] = [];
     const existingIdx = activeBoardRatings[itemId].findIndex(r => (r.userName || "").toLowerCase() === sessionUser.toLowerCase());
+    
+    const ratingRecord = { userName: sessionUser, score: score };
+    if (paramScores && typeof paramScores === "object" && Object.keys(paramScores).length > 0) {
+      ratingRecord.paramScores = paramScores;
+    }
+
     if (existingIdx >= 0) {
-      activeBoardRatings[itemId][existingIdx].score = score;
+      activeBoardRatings[itemId][existingIdx] = ratingRecord;
     } else {
-      activeBoardRatings[itemId].push({ userName: sessionUser, score });
+      activeBoardRatings[itemId].push(ratingRecord);
     }
 
     // Check if item is in unvotedBankData and move it to Tier List
@@ -847,22 +887,103 @@
       inlineRatingItemTitle.textContent = item.title || "Item sem título";
     }
 
+    const singleRatingContainer = document.getElementById("single-rating-container");
+    const parametersRatingContainer = document.getElementById("parameters-rating-container");
+    const inlineRatingValueLabel = document.getElementById("inline-rating-value-label");
+
     const sessionUser = localStorage.getItem("roleta-nmdp-session") || "Anônimo";
     const ratings = activeBoardRatings[item.id] || [];
-    const myRatingObj = ratings.find(r => r.userName.toLowerCase() === sessionUser.toLowerCase());
+    const myRatingObj = ratings.find(r => (r.userName || "").toLowerCase() === sessionUser.toLowerCase());
     const myCurrentScore = myRatingObj ? myRatingObj.score : 5.0;
+    const myParamScores = (myRatingObj && myRatingObj.paramScores) ? myRatingObj.paramScores : {};
 
-    if (inlineRatingSlider) {
-      inlineRatingSlider.value = myCurrentScore;
-    }
-    if (inlineRatingValue) {
-      inlineRatingValue.textContent = `${Number(myCurrentScore).toFixed(1)} / 10`;
+    if (Array.isArray(activeBoardParameters) && activeBoardParameters.length > 0) {
+      if (singleRatingContainer) singleRatingContainer.style.display = "none";
+      if (parametersRatingContainer) parametersRatingContainer.style.display = "flex";
+      if (inlineRatingValueLabel) inlineRatingValueLabel.style.display = "block";
+
+      if (parametersRatingContainer) {
+        parametersRatingContainer.innerHTML = "";
+
+        const updateCalculatedAverage = () => {
+          const sliders = parametersRatingContainer.querySelectorAll(".param-rating-slider");
+          if (sliders.length === 0) return;
+          let sum = 0;
+          sliders.forEach(s => sum += Number(s.value));
+          const avg = Math.round((sum / sliders.length) * 10) / 10;
+          if (inlineRatingValue) {
+            inlineRatingValue.textContent = `${avg.toFixed(1)} / 10`;
+          }
+        };
+
+        activeBoardParameters.forEach(paramName => {
+          const row = document.createElement("div");
+          row.style.display = "flex";
+          row.style.flexDirection = "column";
+          row.style.gap = "0.2rem";
+
+          const header = document.createElement("div");
+          header.style.display = "flex";
+          header.style.justifyContent = "space-between";
+          header.style.fontSize = "0.75rem";
+          header.style.fontWeight = "700";
+          header.style.color = "var(--text)";
+
+          const titleSpan = document.createElement("span");
+          titleSpan.textContent = paramName;
+
+          const valSpan = document.createElement("span");
+          valSpan.className = "param-value-badge";
+          valSpan.style.color = "#ffd700";
+          const initVal = myParamScores[paramName] !== undefined ? myParamScores[paramName] : myCurrentScore;
+          valSpan.textContent = `${Number(initVal).toFixed(1)} / 10`;
+
+          header.appendChild(titleSpan);
+          header.appendChild(valSpan);
+
+          const slider = document.createElement("input");
+          slider.type = "range";
+          slider.min = "0";
+          slider.max = "10";
+          slider.step = "0.1";
+          slider.value = initVal;
+          slider.className = "param-rating-slider";
+          slider.dataset.param = paramName;
+          slider.style.width = "100%";
+          slider.style.height = "6px";
+          slider.style.borderRadius = "3px";
+          slider.style.accentColor = "var(--accent)";
+          slider.style.cursor = "pointer";
+
+          slider.addEventListener("input", () => {
+            valSpan.textContent = `${Number(slider.value).toFixed(1)} / 10`;
+            updateCalculatedAverage();
+          });
+
+          row.appendChild(header);
+          row.appendChild(slider);
+          parametersRatingContainer.appendChild(row);
+        });
+
+        updateCalculatedAverage();
+      }
+    } else {
+      if (singleRatingContainer) singleRatingContainer.style.display = "block";
+      if (parametersRatingContainer) parametersRatingContainer.style.display = "none";
+      if (inlineRatingValueLabel) inlineRatingValueLabel.style.display = "none";
+
+      if (inlineRatingSlider) {
+        inlineRatingSlider.value = myCurrentScore;
+      }
+      if (inlineRatingValue) {
+        inlineRatingValue.textContent = `${Number(myCurrentScore).toFixed(1)} / 10`;
+      }
     }
 
     // Calculate position relative to targetImgElement
     if (targetImgElement) {
       const rect = targetImgElement.getBoundingClientRect();
-      const cardWidth = 260;
+      const cardWidth = 290;
       
       let left = window.scrollX + rect.left + (rect.width / 2) - (cardWidth / 2);
       let top = window.scrollY + rect.bottom + 8;
@@ -910,7 +1031,14 @@
         row.style.marginBottom = "0.25rem";
 
         const text = document.createElement("span");
-        text.innerHTML = `👤 <strong>${r.userName}</strong>: ⭐ ${r.score}/10`;
+        let paramSubtext = "";
+        if (r.paramScores && typeof r.paramScores === "object") {
+          const parts = Object.entries(r.paramScores).map(([k, v]) => `${k}: ${v}`);
+          if (parts.length > 0) {
+            paramSubtext = `<br/><span style="font-size: 0.68rem; color: var(--text-muted);">(${parts.join(", ")})</span>`;
+          }
+        }
+        text.innerHTML = `👤 <strong>${r.userName}</strong>: ⭐ ${r.score}/10${paramSubtext}`;
         row.appendChild(text);
 
         if (isLele) {
@@ -951,10 +1079,25 @@
 
   if (submitInlineRatingBtn) {
     submitInlineRatingBtn.addEventListener("click", async () => {
-      if (activeRatingItem && inlineRatingSlider) {
+      if (!activeRatingItem) return;
+
+      const parametersRatingContainer = document.getElementById("parameters-rating-container");
+      if (Array.isArray(activeBoardParameters) && activeBoardParameters.length > 0 && parametersRatingContainer) {
+        const sliders = parametersRatingContainer.querySelectorAll(".param-rating-slider");
+        const paramScores = {};
+        let sum = 0;
+        sliders.forEach(s => {
+          const val = Number(s.value);
+          paramScores[s.dataset.param] = val;
+          sum += val;
+        });
+        const finalScore = Math.round((sum / Math.max(1, sliders.length)) * 10) / 10;
+        closeInlineRatingCard();
+        await submitItemRating(activeRatingItem.id, finalScore, paramScores);
+      } else if (inlineRatingSlider) {
         const score = Number(inlineRatingSlider.value);
         closeInlineRatingCard();
-        await submitItemRating(activeRatingItem.id, score);
+        await submitItemRating(activeRatingItem.id, score, null);
       }
     });
   }
@@ -2472,6 +2615,208 @@ CREATE POLICY "Allow delete" ON public.tier_lists FOR DELETE USING (true);</pre>
     });
   }
 
+  // --- Setup Form Parameters Logic ---
+  function renderSetupParams() {
+    if (!setupParamsContainer) return;
+    setupParamsContainer.innerHTML = "";
+
+    if (setupParameters.length === 0) {
+      if (noParamsMsg) {
+        noParamsMsg.style.display = "inline";
+        setupParamsContainer.appendChild(noParamsMsg);
+      }
+      return;
+    }
+
+    setupParameters.forEach((param, index) => {
+      const chip = document.createElement("div");
+      chip.style.display = "inline-flex";
+      chip.style.alignItems = "center";
+      chip.style.gap = "0.35rem";
+      chip.style.background = "rgba(108, 92, 231, 0.2)";
+      chip.style.border = "1px solid var(--accent)";
+      chip.style.color = "var(--text)";
+      chip.style.padding = "0.2rem 0.6rem";
+      chip.style.borderRadius = "20px";
+      chip.style.fontSize = "0.8rem";
+      chip.style.fontWeight = "600";
+
+      const text = document.createElement("span");
+      text.textContent = param;
+
+      const delBtn = document.createElement("button");
+      delBtn.type = "button";
+      delBtn.textContent = "✕";
+      delBtn.style.background = "none";
+      delBtn.style.border = "none";
+      delBtn.style.color = "#ff7675";
+      delBtn.style.cursor = "pointer";
+      delBtn.style.fontSize = "0.85rem";
+      delBtn.style.padding = "0";
+      delBtn.style.lineHeight = "1";
+
+      delBtn.addEventListener("click", () => {
+        setupParameters.splice(index, 1);
+        renderSetupParams();
+      });
+
+      chip.appendChild(text);
+      chip.appendChild(delBtn);
+      setupParamsContainer.appendChild(chip);
+    });
+  }
+
+  function addSetupParameter(name) {
+    const clean = (name || "").trim();
+    if (!clean) return;
+    if (setupParameters.some(p => p.toLowerCase() === clean.toLowerCase())) {
+      alert("Este parâmetro já foi adicionado.");
+      return;
+    }
+    setupParameters.push(clean);
+    renderSetupParams();
+  }
+
+  if (addSetupParamBtn && setupParamInput) {
+    addSetupParamBtn.addEventListener("click", () => {
+      addSetupParameter(setupParamInput.value);
+      setupParamInput.value = "";
+    });
+    setupParamInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        addSetupParamBtn.click();
+      }
+    });
+  }
+
+  document.querySelectorAll(".param-preset-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const preset = btn.dataset.preset;
+      if (preset === "games") {
+        setupParameters = ["Jogabilidade", "Gráficos", "Trilha Sonora", "História"];
+      } else if (preset === "anime") {
+        setupParameters = ["Animação", "Enredo", "Personagens", "Trilha Sonora"];
+      } else if (preset === "filmes") {
+        setupParameters = ["Atuação", "Roteiro", "Efeitos Visuais", "Direção"];
+      }
+      renderSetupParams();
+    });
+  });
+
+  // --- Parameters Modal Overlay Logic ---
+  function renderModalParameters() {
+    if (!modalParamsList) return;
+    modalParamsList.innerHTML = "";
+
+    if (editingModalParameters.length === 0) {
+      const emptyMsg = document.createElement("p");
+      emptyMsg.style.color = "var(--text-muted)";
+      emptyMsg.style.fontSize = "0.85rem";
+      emptyMsg.style.fontStyle = "italic";
+      emptyMsg.style.textAlign = "center";
+      emptyMsg.style.padding = "1rem 0";
+      emptyMsg.textContent = "Nenhum parâmetro definido (avaliação direta de 0 a 10).";
+      modalParamsList.appendChild(emptyMsg);
+      return;
+    }
+
+    editingModalParameters.forEach((param, index) => {
+      const row = document.createElement("div");
+      row.style.display = "flex";
+      row.style.alignItems = "center";
+      row.style.gap = "0.5rem";
+      row.style.background = "var(--surface-raised)";
+      row.style.padding = "0.4rem 0.75rem";
+      row.style.borderRadius = "8px";
+      row.style.border = "1px solid var(--border)";
+
+      const input = document.createElement("input");
+      input.type = "text";
+      input.className = "input-text";
+      input.style.flex = "1";
+      input.style.padding = "0.3rem 0.6rem";
+      input.style.fontSize = "0.85rem";
+      input.value = param;
+
+      input.addEventListener("change", () => {
+        const clean = input.value.trim();
+        if (clean) {
+          editingModalParameters[index] = clean;
+        } else {
+          input.value = editingModalParameters[index];
+        }
+      });
+
+      const delBtn = document.createElement("button");
+      delBtn.type = "button";
+      delBtn.className = "btn-danger-sm";
+      delBtn.textContent = "🗑️";
+      delBtn.style.padding = "0.3rem 0.6rem";
+      delBtn.style.fontSize = "0.75rem";
+
+      delBtn.addEventListener("click", () => {
+        editingModalParameters.splice(index, 1);
+        renderModalParameters();
+      });
+
+      row.appendChild(input);
+      row.appendChild(delBtn);
+      modalParamsList.appendChild(row);
+    });
+  }
+
+  if (editParametersBtn) {
+    editParametersBtn.addEventListener("click", () => {
+      if (!canUserEditActiveBoard()) return;
+      editingModalParameters = [...activeBoardParameters];
+      renderModalParameters();
+      if (parametersOverlay) parametersOverlay.hidden = false;
+    });
+  }
+
+  if (modalAddParamBtn && modalParamInput) {
+    const addModalParam = () => {
+      const clean = modalParamInput.value.trim();
+      if (!clean) return;
+      if (editingModalParameters.some(p => p.toLowerCase() === clean.toLowerCase())) {
+        alert("Este parâmetro já existe.");
+        return;
+      }
+      editingModalParameters.push(clean);
+      modalParamInput.value = "";
+      renderModalParameters();
+    };
+
+    modalAddParamBtn.addEventListener("click", addModalParam);
+    modalParamInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        addModalParam();
+      }
+    });
+  }
+
+  if (cancelParametersBtn) {
+    cancelParametersBtn.addEventListener("click", () => {
+      if (parametersOverlay) parametersOverlay.hidden = true;
+    });
+  }
+
+  if (saveParametersBtn) {
+    saveParametersBtn.addEventListener("click", async () => {
+      activeBoardParameters = [...editingModalParameters];
+      saveBoardState();
+
+      if (supabase && activeBoardIsFeatured) {
+        await autoSaveFeaturedBoard();
+      }
+
+      if (parametersOverlay) parametersOverlay.hidden = true;
+      showAutoSaveToast("⚙️ Parâmetros atualizados!");
+    });
+  }
+
   // --- Setup Landing Screen Events ---
 
   toggleSetupBtn.addEventListener("click", () => {
@@ -2494,6 +2839,7 @@ CREATE POLICY "Allow delete" ON public.tier_lists FOR DELETE USING (true);</pre>
     activeBoardId = null;
     activeBoardIsFeatured = false;
     activeBoardCreatedBy = localStorage.getItem("roleta-nmdp-session") || "Anônimo";
+    activeBoardParameters = [...setupParameters];
     deleteBoardBtn.style.display = "none";
 
     // Template selection
@@ -2565,6 +2911,8 @@ CREATE POLICY "Allow delete" ON public.tier_lists FOR DELETE USING (true);</pre>
       activeBoardId = null;
       activeBoardIsFeatured = false;
       activeBoardCreatedBy = null;
+      activeBoardParameters = [];
+      setupParameters = [];
       boardTitle = "Minha Tier List";
       tiersData = JSON.parse(JSON.stringify(DEFAULT_TIERS));
       bankData = [];
@@ -2580,6 +2928,7 @@ CREATE POLICY "Allow delete" ON public.tier_lists FOR DELETE USING (true);</pre>
       if (setupTitleInput) setupTitleInput.value = "Minha Tier List";
       if (setupImportCheckbox) setupImportCheckbox.checked = false;
       if (setupImportOptions) setupImportOptions.style.display = "none";
+      renderSetupParams();
       
       // Reset collapse state
       if (setupCollapseContainer) setupCollapseContainer.classList.remove("expanded");
@@ -2594,6 +2943,7 @@ CREATE POLICY "Allow delete" ON public.tier_lists FOR DELETE USING (true);</pre>
   async function init() {
     loadBoardState();
     updateUserSessionUI();
+    renderSetupParams();
     
     if (activeEditing) {
       landingWrapper.style.display = "none";

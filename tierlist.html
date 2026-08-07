@@ -73,6 +73,24 @@
               </div>
             </div>
 
+            <div class="setting-group" style="margin-bottom: 1.25rem;">
+              <label class="label">Parâmetros de Avaliação (Opcional)</label>
+              <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.5rem;">Crie critérios específicos para calcular a nota final dos itens por média (ex: Gráficos, Jogabilidade).</p>
+              <div style="display: flex; gap: 0.5rem; margin-bottom: 0.5rem;">
+                <input type="text" id="setup-param-input" class="input-text" placeholder="Nome do parâmetro (ex: Jogabilidade)" style="flex: 1; font-size: 0.85rem;" />
+                <button type="button" id="add-setup-param-btn" class="btn-primary-sm" style="padding: 0.4rem 0.8rem; font-size: 0.85rem; white-space: nowrap;">➕ Adicionar</button>
+              </div>
+              <div style="display: flex; gap: 0.4rem; margin-bottom: 0.5rem; flex-wrap: wrap;" id="setup-param-presets">
+                <span style="font-size: 0.75rem; color: var(--text-muted); align-self: center;">Presets rápidos:</span>
+                <button type="button" class="btn-secondary-sm param-preset-btn" data-preset="games" style="font-size: 0.75rem; padding: 0.15rem 0.5rem;">🎮 Games</button>
+                <button type="button" class="btn-secondary-sm param-preset-btn" data-preset="anime" style="font-size: 0.75rem; padding: 0.15rem 0.5rem;">🍿 Anime</button>
+                <button type="button" class="btn-secondary-sm param-preset-btn" data-preset="filmes" style="font-size: 0.75rem; padding: 0.15rem 0.5rem;">🎬 Filmes</button>
+              </div>
+              <div id="setup-params-container" style="display: flex; flex-wrap: wrap; gap: 0.4rem; min-height: 36px; padding: 0.45rem; background: var(--surface-raised); border: 1px solid var(--border); border-radius: 8px;">
+                <span id="no-params-msg" style="font-size: 0.8rem; color: var(--text-muted); font-style: italic;">Nenhum parâmetro adicionado (avaliação direta de 0 a 10).</span>
+              </div>
+            </div>
+
             <div class="setting-group" style="margin-bottom: 1.5rem; padding: 1rem; background: rgba(255,255,255,0.02); border-radius: 10px; border: 1px solid var(--border);">
               <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-weight: 700; font-size: 0.95rem;">
                 <input type="checkbox" id="setup-import-checkbox" style="width: 16px; height: 16px; accent-color: var(--accent);" />
@@ -174,6 +192,7 @@
               <button type="button" id="delete-board-btn" class="btn-danger-sm" style="display: none;" title="Excluir este tabuleiro permanentemente">🗑️ Excluir Tabuleiro</button>
               <button type="button" id="change-owner-btn" class="btn-secondary-sm" style="display: none; background: linear-gradient(135deg, #00b894, #00cec9); color: #fff; font-weight: 700;" title="Alterar o proprietário deste tabuleiro">👤 Alterar Criador</button>
               <button type="button" id="open-thresholds-modal-btn" class="btn-secondary-sm" style="display: none; background: linear-gradient(135deg, #f1c40f, #e67e22); color: #000; font-weight: 700;" title="Configurar requisitos de notas mínimas para todas as categorias (Admin lele)">📊 Limites de Notas</button>
+              <button type="button" id="edit-parameters-btn" class="btn-secondary-sm" style="display: none; background: linear-gradient(135deg, #a55eea, #4b7bec); color: #fff; font-weight: 700;" title="Criar ou editar parâmetros de avaliação desta Tier List">⚙️ Parâmetros</button>
             </div>
             <div class="tierlist-btn-group">
               <button type="button" id="open-import-modal-btn" class="btn-secondary-sm" style="background: rgba(108, 92, 231, 0.15); border: 1px solid var(--accent); color: var(--text);">📥 Importar da Galeria</button>
@@ -268,6 +287,30 @@
     </div>
   </div>
 
+  <!-- Parameters Editing Modal Overlay -->
+  <div class="edit-overlay" id="parameters-overlay" hidden>
+    <div class="edit-modal" style="max-width: 480px;">
+      <h2 class="edit-modal__title" style="margin-bottom: 0.5rem;">⚙️ Parâmetros de Avaliação</h2>
+      <p class="setting-desc" style="margin-bottom: 1rem; color: var(--text-muted); font-size: 0.85rem;">
+        Gerencie os critérios de nota para esta Tier List. Cada item terá uma nota calculada pela média dos parâmetros definidos abaixo:
+      </p>
+      
+      <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
+        <input type="text" id="modal-param-input" class="input-text" placeholder="Novo parâmetro (ex: Jogabilidade)" style="flex: 1;" />
+        <button type="button" id="modal-add-param-btn" class="btn-primary" style="padding: 0.5rem 1rem;">➕ Adicionar</button>
+      </div>
+
+      <div id="modal-params-list" style="display: flex; flex-direction: column; gap: 0.5rem; max-height: 250px; overflow-y: auto; margin-bottom: 1.25rem; padding-right: 4px;">
+        <!-- Populated by JS -->
+      </div>
+
+      <div class="edit-modal__actions" style="display: flex; gap: 0.75rem; justify-content: flex-end;">
+        <button type="button" id="cancel-parameters-btn" class="btn-secondary">Cancelar</button>
+        <button type="button" id="save-parameters-btn" class="btn-primary" style="background: linear-gradient(135deg, #a55eea, #4b7bec); color: #fff; font-weight: 700;">💾 Salvar Parâmetros</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Import Modal Overlay -->
   <div class="edit-overlay" id="import-overlay" hidden>
     <div class="edit-modal" style="max-width: 420px; text-align: center;">
@@ -306,23 +349,32 @@
   </div>
 
   <!-- Floating Inline Rating Card (0.1 Step Precision) -->
-  <div id="inline-rating-card" style="display: none; position: absolute; z-index: 99999; width: 260px; background: rgba(18, 20, 29, 0.96); backdrop-filter: blur(14px); border: 1px solid var(--accent); border-radius: 14px; padding: 1rem; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6); flex-direction: column; gap: 0.6rem; animation: popIn 0.2s cubic-bezier(0.4, 0, 0.2, 1);">
+  <div id="inline-rating-card" style="display: none; position: absolute; z-index: 99999; width: 290px; background: rgba(18, 20, 29, 0.96); backdrop-filter: blur(14px); border: 1px solid var(--accent); border-radius: 14px; padding: 1rem; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6); flex-direction: column; gap: 0.6rem; animation: popIn 0.2s cubic-bezier(0.4, 0, 0.2, 1);">
     <div style="display: flex; justify-content: space-between; align-items: center;">
-      <span id="inline-rating-item-title" style="font-size: 0.85rem; font-weight: 700; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 190px;">Item</span>
+      <span id="inline-rating-item-title" style="font-size: 0.85rem; font-weight: 700; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px;">Item</span>
       <button type="button" id="close-inline-rating-btn" style="background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 1.1rem; padding: 0; line-height: 1;">✕</button>
     </div>
     
-    <div id="inline-rating-value" style="font-size: 1.75rem; font-weight: 800; color: #ffd700; text-align: center; text-shadow: 0 0 10px rgba(255, 215, 0, 0.4); margin: 0.2rem 0;">
-      5.0 / 10
+    <div id="inline-rating-value-box" style="text-align: center; margin: 0.2rem 0;">
+      <div id="inline-rating-value-label" style="font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 700; display: none;">Média Final</div>
+      <div id="inline-rating-value" style="font-size: 1.75rem; font-weight: 800; color: #ffd700; text-shadow: 0 0 10px rgba(255, 215, 0, 0.4);">
+        5.0 / 10
+      </div>
     </div>
     
-    <div>
+    <!-- Single Rating Container (used if no custom parameters exist) -->
+    <div id="single-rating-container">
       <input type="range" id="inline-rating-slider" min="0" max="10" step="0.1" value="5.0" style="width: 100%; height: 6px; border-radius: 3px; accent-color: var(--accent); cursor: pointer;" />
       <div style="display: flex; justify-content: space-between; font-size: 0.65rem; color: var(--text-muted); font-weight: 600; margin-top: 0.25rem;">
         <span>0.0</span>
         <span>5.0</span>
         <span>10.0</span>
       </div>
+    </div>
+
+    <!-- Parameter Sliders Container (used when tier list has parameters) -->
+    <div id="parameters-rating-container" style="display: none; flex-direction: column; gap: 0.65rem; max-height: 250px; overflow-y: auto; padding-right: 2px;">
+      <!-- Populated dynamically by JS -->
     </div>
 
     <button type="button" id="submit-inline-rating-btn" class="btn-primary" style="width: 100%; padding: 0.45rem; font-size: 0.85rem; font-weight: 700; background: linear-gradient(135deg, var(--accent), #5f27cd); color: #fff; margin-top: 0.25rem; border-radius: 8px;">
