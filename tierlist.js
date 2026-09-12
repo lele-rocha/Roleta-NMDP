@@ -344,6 +344,11 @@
     state.activeBoardRatings = activeBoardRatings;
     state.activeBoardParameters = activeBoardParameters;
 
+    // Keep in-memory arrays strictly synchronized with DOM state
+    tiersData = state.tiers;
+    bankData = state.bank;
+    unvotedBankData = state.unvotedBank;
+
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     } catch (quotaError) {
@@ -707,31 +712,88 @@
       activeBoardRatings[itemId].push(ratingRecord);
     }
 
-    // Check if item is in unvotedBankData and move it to Tier List
-    const unvotedIdx = unvotedBankData.findIndex(item => item.id === itemId);
-    if (unvotedIdx >= 0) {
-      const itemToMove = unvotedBankData.splice(unvotedIdx, 1)[0];
-      const numRows = tiersData.length || 1;
-      let targetRowIndex = numRows - 1;
+    // 2. Synchronize current state from DOM first
+    saveBoardState();
 
-      if (score >= 9.0) targetRowIndex = 0;
-      else if (score >= 7.5) targetRowIndex = Math.min(1, numRows - 1);
-      else if (score >= 5.5) targetRowIndex = Math.min(2, numRows - 1);
-      else if (score >= 3.5) targetRowIndex = Math.min(3, numRows - 1);
-      else targetRowIndex = numRows - 1;
+    // 3. Locate the item being rated
+    let itemObj = null;
 
-      if (tiersData[targetRowIndex]) {
-        tiersData[targetRowIndex].items.push(itemToMove);
+    // Check tiersData
+    for (const tier of tiersData) {
+      if (Array.isArray(tier.items)) {
+        const idx = tier.items.findIndex(it => it.id === itemId);
+        if (idx >= 0) {
+          itemObj = tier.items[idx];
+          break;
+        }
       }
     }
 
-    // 2. Auto re-sort board items across rows and within rows based on average scores (0-10 scale)
+    // Check bankData
+    if (!itemObj && Array.isArray(bankData)) {
+      const idx = bankData.findIndex(it => it.id === itemId);
+      if (idx >= 0) {
+        itemObj = bankData[idx];
+      }
+    }
+
+    // Check unvotedBankData
+    if (!itemObj && Array.isArray(unvotedBankData)) {
+      const idx = unvotedBankData.findIndex(it => it.id === itemId);
+      if (idx >= 0) {
+        itemObj = unvotedBankData[idx];
+      }
+    }
+
+    // Fallback to activeRatingItem or DOM
+    if (!itemObj) {
+      if (activeRatingItem && activeRatingItem.id === itemId) {
+        itemObj = { id: activeRatingItem.id, src: activeRatingItem.src, title: activeRatingItem.title || "" };
+      } else {
+        const domImg = document.querySelector(`.tier-item-img[data-id="${itemId}"]`);
+        if (domImg) {
+          itemObj = { id: itemId, src: domImg.src, title: domImg.title || "" };
+        }
+      }
+    }
+
+    // 4. Remove item from bankData and unvotedBankData, and from all tiers
+    if (itemObj) {
+      bankData = bankData.filter(it => it.id !== itemId);
+      unvotedBankData = unvotedBankData.filter(it => it.id !== itemId);
+      tiersData.forEach(t => {
+        if (Array.isArray(t.items)) {
+          t.items = t.items.filter(it => it.id !== itemId);
+        }
+      });
+
+      // Place into tiersData in the row corresponding to score
+      const stats = getItemRatingStats(itemId);
+      const avgScore = stats.count > 0 ? stats.avg : score;
+      const numRows = tiersData.length || 1;
+      let targetRowIndex = numRows - 1;
+
+      for (let i = 0; i < numRows; i++) {
+        const reqScore = getRowMinScore(tiersData[i], i, numRows);
+        if (avgScore >= reqScore) {
+          targetRowIndex = i;
+          break;
+        }
+      }
+
+      if (tiersData[targetRowIndex]) {
+        tiersData[targetRowIndex].items.push(itemObj);
+      }
+    }
+
+    // 5. Auto re-sort board items across rows and within rows based on average scores (0-10 scale)
     applyFeaturedAutoSorting();
     renderBoard();
+    renderBank();
     renderUnvotedBank();
     saveBoardState();
 
-    // 3. Save to Supabase featured_ratings table & auto-save board state
+    // 6. Save to Supabase featured_ratings table & auto-save board state
     if (supabase) {
       try {
         await supabase.from("featured_ratings").upsert({
@@ -806,6 +868,8 @@
       }
     } else {
       renderBoard();
+      renderBank();
+      renderUnvotedBank();
     }
     saveBoardState();
 
@@ -813,6 +877,16 @@
   }
 
   function applyFeaturedAutoSorting() {
+    // Record where unvoted items currently are (for personal non-featured tier lists)
+    const unvotedTierMap = {};
+    tiersData.forEach((tier, tIdx) => {
+      if (Array.isArray(tier.items)) {
+        tier.items.forEach(it => {
+          unvotedTierMap[it.id] = tIdx;
+        });
+      }
+    });
+
     // Collect all placed items and unvoted bank items
     const allPlacedItems = [];
     tiersData.forEach(tier => {
@@ -825,7 +899,31 @@
       allPlacedItems.push(...unvotedBankData);
     }
 
+    // Also promote any items in bankData that have votes (stats.count > 0)
+    if (Array.isArray(bankData)) {
+      const remainingBank = [];
+      bankData.forEach(item => {
+        const stats = getItemRatingStats(item.id);
+        if (stats.count > 0) {
+          allPlacedItems.push(item);
+        } else {
+          remainingBank.push(item);
+        }
+      });
+      bankData = remainingBank;
+    }
+
     if (allPlacedItems.length === 0) return;
+
+    // Deduplicate allPlacedItems by id
+    const seenIds = new Set();
+    const uniqueItems = [];
+    allPlacedItems.forEach(item => {
+      if (item && item.id && !seenIds.has(item.id)) {
+        seenIds.add(item.id);
+        uniqueItems.push(item);
+      }
+    });
 
     // Clear items from tiers and unvoted bank
     tiersData.forEach(tier => {
@@ -835,8 +933,8 @@
 
     const numRows = tiersData.length;
 
-    // Distribute items into tier rows if voted, or into unvotedBankData if 0 votes
-    allPlacedItems.forEach(item => {
+    // Distribute items into tier rows if voted, or into unvotedBankData (or keep in tier for personal boards)
+    uniqueItems.forEach(item => {
       const stats = getItemRatingStats(item.id);
       if (stats.count > 0) {
         let targetRowIndex = numRows - 1; // Default to lowest tier
@@ -852,8 +950,12 @@
           tiersData[targetRowIndex].items.push(item);
         }
       } else {
-        // 0 votes -> place in unvotedBankData
-        unvotedBankData.push(item);
+        // 0 votes -> if personal board and was already in a tier, keep in that tier
+        if (!activeBoardIsFeatured && unvotedTierMap[item.id] !== undefined && tiersData[unvotedTierMap[item.id]]) {
+          tiersData[unvotedTierMap[item.id]].items.push(item);
+        } else {
+          unvotedBankData.push(item);
+        }
       }
     });
 
@@ -870,6 +972,7 @@
     });
 
     renderBoard();
+    renderBank();
     renderUnvotedBank();
   }
 
