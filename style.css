@@ -1814,9 +1814,10 @@ select {
 }
 
 .tier-item-img {
-  width: 80px;
+  width: auto;
+  max-width: 120px;
   height: 80px;
-  object-fit: cover;
+  object-fit: contain;
   border-radius: 6px;
   cursor: grab;
   user-select: none;

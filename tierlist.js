@@ -107,6 +107,15 @@
   const importOverlay = document.getElementById("import-overlay");
   const cancelImportBtn = document.getElementById("cancel-import-btn");
 
+  // Export Presentation Modal Selectors
+  const exportPreviewOverlay = document.getElementById("export-preview-overlay");
+  const exportPreviewImg = document.getElementById("export-preview-img");
+  const copyImageBtn = document.getElementById("copy-image-btn");
+  const downloadFinalPngBtn = document.getElementById("download-final-png-btn");
+  const closeExportModalBtn = document.getElementById("close-export-modal-btn");
+  let activeExportCanvas = null;
+  let activeExportTitle = "";
+
   // Local State variables
   let activeBoardId = null;
   let activeEditing = false;
@@ -1926,37 +1935,285 @@
   document.getElementById("import-filmes-choice-btn").addEventListener("click", () => executeImport("filmes"));
   document.getElementById("import-all-choice-btn").addEventListener("click", () => executeImport("all"));
 
-  // --- Save as PNG using html2canvas ---
+  // --- Export Presentation Image (html2canvas) with Download and Copy ---
 
-  downloadPngBtn.addEventListener("click", () => {
-    const originalText = downloadPngBtn.textContent;
-    downloadPngBtn.disabled = true;
-    downloadPngBtn.textContent = "Gerando Imagem...";
-
-    // Use html2canvas to render the board
-    window.html2canvas(boardContainer, {
-      backgroundColor: "#0f1117",
-      logging: false,
-      useCORS: true,
-      scale: 2 // double scale for crisp image quality
-    }).then(canvas => {
-      const link = document.createElement("a");
-      link.download = `tierlist-${Date.now()}.png`;
-      link.href = canvas.toDataURL("image/png");
-      link.click();
-
-      downloadPngBtn.disabled = false;
-      downloadPngBtn.textContent = originalText;
-    }).catch(err => {
-      console.error("Erro ao gerar PNG:", err);
-      alert("Houve um erro ao tentar salvar o tabuleiro como imagem.");
-      downloadPngBtn.disabled = false;
-      downloadPngBtn.textContent = originalText;
+  if (closeExportModalBtn) {
+    closeExportModalBtn.addEventListener("click", () => {
+      if (exportPreviewOverlay) exportPreviewOverlay.hidden = true;
     });
+  }
+
+  if (exportPreviewOverlay) {
+    exportPreviewOverlay.addEventListener("click", (e) => {
+      if (e.target === exportPreviewOverlay) {
+        exportPreviewOverlay.hidden = true;
+      }
+    });
+  }
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && exportPreviewOverlay && !exportPreviewOverlay.hidden) {
+      exportPreviewOverlay.hidden = true;
+    }
   });
 
+  downloadPngBtn.addEventListener("click", async () => {
+    const originalText = downloadPngBtn.textContent;
+    downloadPngBtn.disabled = true;
+    downloadPngBtn.textContent = "⏳ Diagramando...";
+
+    let presentationContainer = null;
+    try {
+      const titleText = (activeTierlistTitle ? activeTierlistTitle.textContent.trim() : "Tier List") || "Tier List";
+      activeExportTitle = titleText;
+
+      // 1. Create offscreen presentation wrapper
+      presentationContainer = document.createElement("div");
+      presentationContainer.id = "tier-presentation-capture";
+      presentationContainer.style.position = "fixed";
+      presentationContainer.style.left = "-99999px";
+      presentationContainer.style.top = "0";
+      presentationContainer.style.width = "1180px";
+      presentationContainer.style.zIndex = "-99999";
+      presentationContainer.style.pointerEvents = "none";
+      presentationContainer.style.backgroundColor = "#0e1118";
+      presentationContainer.style.backgroundImage = "radial-gradient(ellipse 90% 40% at 50% -10%, rgba(108, 92, 231, 0.18), rgba(14, 17, 24, 0))";
+      presentationContainer.style.padding = "28px 24px 22px 24px";
+      presentationContainer.style.boxSizing = "border-box";
+      presentationContainer.style.fontFamily = "'Outfit', sans-serif";
+      presentationContainer.style.color = "#f1f2f6";
+      presentationContainer.style.display = "flex";
+      presentationContainer.style.flexDirection = "column";
+      presentationContainer.style.gap = "20px";
+
+      // 2. Header: Brand, Title, and Creator
+      const header = document.createElement("div");
+      header.style.display = "flex";
+      header.style.flexDirection = "column";
+      header.style.alignItems = "center";
+      header.style.justifyContent = "center";
+      header.style.textAlign = "center";
+      header.style.gap = "6px";
+      header.style.paddingBottom = "4px";
+
+      const brand = document.createElement("div");
+      brand.style.fontSize = "0.85rem";
+      brand.style.fontWeight = "700";
+      brand.style.letterSpacing = "3px";
+      brand.style.textTransform = "uppercase";
+      brand.style.color = "#a29bfe";
+      brand.textContent = "Roleta NMDP • Tier List";
+      header.appendChild(brand);
+
+      const titleEl = document.createElement("h1");
+      titleEl.style.margin = "0";
+      titleEl.style.fontSize = "2.35rem";
+      titleEl.style.fontWeight = "800";
+      titleEl.style.color = "#ffffff";
+      titleEl.style.textShadow = "0 3px 14px rgba(0, 0, 0, 0.6)";
+      titleEl.style.letterSpacing = "-0.5px";
+      titleEl.textContent = titleText;
+      header.appendChild(titleEl);
+
+      if (activeBoardCreatedBy || activeBoardIsFeatured) {
+        const sub = document.createElement("div");
+        sub.style.fontSize = "0.9rem";
+        sub.style.fontWeight = "600";
+        sub.style.color = "#a4b0be";
+        sub.style.marginTop = "2px";
+        if (activeBoardIsFeatured) {
+          sub.innerHTML = `<span style="color: #ffd700;">⭐ Destaque Global</span>${activeBoardCreatedBy ? ` • Criado por ${activeBoardCreatedBy}` : ""}`;
+        } else if (activeBoardCreatedBy) {
+          sub.textContent = `Criado por ${activeBoardCreatedBy}`;
+        }
+        header.appendChild(sub);
+      }
+
+      presentationContainer.appendChild(header);
+
+      // 3. Board Container with Clean Rows (no controls, no edit buttons)
+      const boardWrap = document.createElement("div");
+      boardWrap.style.display = "flex";
+      boardWrap.style.flexDirection = "column";
+      boardWrap.style.backgroundColor = "#121520";
+      boardWrap.style.border = "1px solid rgba(255, 255, 255, 0.12)";
+      boardWrap.style.borderRadius = "12px";
+      boardWrap.style.overflow = "hidden";
+      boardWrap.style.boxShadow = "0 14px 40px rgba(0, 0, 0, 0.6)";
+
+      const originalRows = boardContainer.querySelectorAll(".tier-row");
+      originalRows.forEach((origRow, rIdx) => {
+        const rowClone = document.createElement("div");
+        rowClone.style.display = "flex";
+        rowClone.style.minHeight = "112px";
+        if (rIdx < originalRows.length - 1) {
+          rowClone.style.borderBottom = "1px solid rgba(255, 255, 255, 0.08)";
+        }
+
+        // Tier Label
+        const origLabel = origRow.querySelector(".tier-label");
+        const labelClone = document.createElement("div");
+        labelClone.style.width = "135px";
+        labelClone.style.minWidth = "135px";
+        labelClone.style.minHeight = "112px";
+        labelClone.style.display = "flex";
+        labelClone.style.alignItems = "center";
+        labelClone.style.justifyContent = "center";
+        labelClone.style.textAlign = "center";
+        labelClone.style.padding = "10px 14px";
+        labelClone.style.fontSize = "1rem";
+        labelClone.style.fontWeight = "800";
+        labelClone.style.color = "#0f1117";
+        labelClone.style.wordBreak = "break-word";
+        labelClone.style.boxShadow = "inset -4px 0 10px rgba(0,0,0,0.18)";
+        labelClone.style.backgroundColor = (origLabel && (origLabel.dataset.color || origLabel.style.backgroundColor)) || "#5f27cd";
+        labelClone.textContent = origLabel ? origLabel.textContent.trim() : `Tier ${rIdx + 1}`;
+        rowClone.appendChild(labelClone);
+
+        // Tier Items (stretching all the way to the right, preserving original aspect ratio)
+        const itemsClone = document.createElement("div");
+        itemsClone.style.flex = "1";
+        itemsClone.style.minHeight = "112px";
+        itemsClone.style.backgroundColor = "#0f1117";
+        itemsClone.style.display = "flex";
+        itemsClone.style.flexWrap = "wrap";
+        itemsClone.style.alignContent = "flex-start";
+        itemsClone.style.alignItems = "center";
+        itemsClone.style.gap = "8px";
+        itemsClone.style.padding = "8px 12px";
+
+        const origItems = origRow.querySelectorAll(".tier-item-img");
+        origItems.forEach(origImg => {
+          const itemImg = document.createElement("img");
+          itemImg.src = origImg.src;
+          // Maintain original poster/card aspect ratio
+          itemImg.style.height = "96px";
+          itemImg.style.width = "auto";
+          itemImg.style.maxWidth = "140px";
+          itemImg.style.objectFit = "contain";
+          itemImg.style.borderRadius = "6px";
+          itemImg.style.boxShadow = "0 3px 10px rgba(0,0,0,0.45)";
+          itemImg.style.display = "block";
+          itemsClone.appendChild(itemImg);
+        });
+
+        rowClone.appendChild(itemsClone);
+        boardWrap.appendChild(rowClone);
+      });
+
+      presentationContainer.appendChild(boardWrap);
+
+      // 4. Footer Watermark
+      const footer = document.createElement("div");
+      footer.style.display = "flex";
+      footer.style.justifyContent = "space-between";
+      footer.style.alignItems = "center";
+      footer.style.fontSize = "0.8rem";
+      footer.style.color = "rgba(255, 255, 255, 0.45)";
+      footer.style.fontWeight = "600";
+      footer.style.padding = "0 4px";
+
+      const leftNote = document.createElement("span");
+      leftNote.textContent = "🎮 Roleta NMDP";
+      footer.appendChild(leftNote);
+
+      const rightNote = document.createElement("span");
+      rightNote.textContent = new Date().toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
+      footer.appendChild(rightNote);
+
+      presentationContainer.appendChild(footer);
+
+      // 5. Append offscreen & wait for images
+      document.body.appendChild(presentationContainer);
+
+      const images = Array.from(presentationContainer.querySelectorAll("img"));
+      await Promise.all(images.map(img => {
+        if (img.complete) return Promise.resolve();
+        return new Promise(res => {
+          img.onload = res;
+          img.onerror = res;
+        });
+      }));
+
+      // 6. Capture with html2canvas (Ultra HD 4K Scale: 3)
+      const canvas = await window.html2canvas(presentationContainer, {
+        backgroundColor: "#0e1118",
+        logging: false,
+        useCORS: true,
+        scale: 3
+      });
+
+      activeExportCanvas = canvas;
+      if (exportPreviewImg) {
+        exportPreviewImg.src = canvas.toDataURL("image/png");
+      }
+      if (exportPreviewOverlay) {
+        exportPreviewOverlay.hidden = false;
+      }
+    } catch (err) {
+      console.error("Erro ao gerar apresentação da Tier List:", err);
+      alert("Houve um erro ao gerar a imagem de apresentação da Tier List.");
+    } finally {
+      if (presentationContainer && presentationContainer.parentNode) {
+        presentationContainer.parentNode.removeChild(presentationContainer);
+      }
+      downloadPngBtn.disabled = false;
+      downloadPngBtn.textContent = originalText;
+    }
+  });
+
+  // Action: Download Final PNG
+  if (downloadFinalPngBtn) {
+    downloadFinalPngBtn.addEventListener("click", () => {
+      if (!activeExportCanvas) return;
+      const sanitized = (activeExportTitle || "tierlist")
+        .toLowerCase()
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "") || "tierlist";
+
+      const link = document.createElement("a");
+      link.download = `tierlist-${sanitized}.png`;
+      link.href = activeExportCanvas.toDataURL("image/png");
+      link.click();
+    });
+  }
+
+  // Action: Copy Image to Clipboard
+  if (copyImageBtn) {
+    copyImageBtn.addEventListener("click", () => {
+      if (!activeExportCanvas) return;
+      const originalText = copyImageBtn.innerHTML;
+      copyImageBtn.disabled = true;
+      copyImageBtn.textContent = "⏳ Copiando...";
+
+      activeExportCanvas.toBlob(async (blob) => {
+        try {
+          if (!blob) throw new Error("Falha ao preparar blob da imagem.");
+          if (!navigator.clipboard || !navigator.clipboard.write) {
+            throw new Error("API de Área de Transferência não disponível.");
+          }
+          await navigator.clipboard.write([
+            new ClipboardItem({ "image/png": blob })
+          ]);
+          showAutoSaveToast("📋 Imagem copiada para a área de transferência!");
+          copyImageBtn.innerHTML = "✅ Imagem Copiada!";
+          setTimeout(() => {
+            copyImageBtn.innerHTML = originalText;
+            copyImageBtn.disabled = false;
+          }, 2000);
+        } catch (err) {
+          console.warn("Clipboard write failed:", err);
+          alert("Não foi possível copiar diretamente para a área de transferência pelo navegador. Você pode clicar com o botão direito na imagem e escolher 'Copiar Imagem', ou utilizar o botão 'Baixar Imagem'.");
+          copyImageBtn.innerHTML = originalText;
+          copyImageBtn.disabled = false;
+        }
+      }, "image/png");
+    });
+  }
+
   // Helper to compress image data URLs for database saving
-  function compressImageDataUrl(src, maxDim = 250, quality = 0.8) {
+  function compressImageDataUrl(src, maxDim = 600, quality = 0.95) {
     if (!src || !src.startsWith("data:image/") || src.length < 50000) {
       return Promise.resolve(src);
     }

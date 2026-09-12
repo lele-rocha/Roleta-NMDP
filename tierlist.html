@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Roleta NMDP - Tier List</title>
-  <link rel="stylesheet" href="style.css?v=37">
+  <link rel="stylesheet" href="style.css?v=39">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
@@ -196,7 +196,7 @@
             </div>
             <div class="tierlist-btn-group">
               <button type="button" id="open-import-modal-btn" class="btn-secondary-sm" style="background: rgba(108, 92, 231, 0.15); border: 1px solid var(--accent); color: var(--text);">📥 Importar da Galeria</button>
-              <button type="button" id="download-png-btn" class="btn-primary-sm" style="background: linear-gradient(135deg, #00b894, #00dec9); box-shadow: 0 4px 12px rgba(0, 184, 148, 0.3);">💾 Salvar PNG</button>
+              <button type="button" id="download-png-btn" class="btn-primary-sm" style="background: linear-gradient(135deg, #00b894, #00dec9); box-shadow: 0 4px 12px rgba(0, 184, 148, 0.3);" title="Gerar imagem diagramada para apresentação">📸 Gerar Imagem</button>
             </div>
           </div>
         </section>
@@ -338,6 +338,39 @@
     </div>
   </div>
 
+  <!-- Export Presentation Preview Modal Overlay -->
+  <div class="edit-overlay" id="export-preview-overlay" hidden>
+    <div class="edit-modal" style="max-width: 960px; width: 95%; max-height: 92vh; display: flex; flex-direction: column; padding: 1.5rem;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+        <div>
+          <h2 class="edit-modal__title" style="margin-bottom: 0.25rem;">📸 Apresentação da Tier List</h2>
+          <p class="setting-desc" style="margin: 0; font-size: 0.85rem; color: var(--text-muted);">
+            Pré-visualize a imagem diagramada. Você pode copiá-la ou baixá-la em alta resolução.
+          </p>
+        </div>
+        <button type="button" id="close-export-modal-btn" style="background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 1.4rem; padding: 0.25rem; line-height: 1;" title="Fechar">✕</button>
+      </div>
+
+      <div style="flex: 1; overflow-y: auto; overflow-x: hidden; background: #080a0f; border-radius: 8px; border: 1px solid var(--border); padding: 1rem; display: flex; justify-content: center; align-items: flex-start; min-height: 250px;">
+        <img id="export-preview-img" src="" alt="Pré-visualização da Tier List" style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6); display: block;" />
+      </div>
+
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1.25rem; flex-wrap: wrap; gap: 0.75rem;">
+        <span style="font-size: 0.8rem; color: var(--text-muted);">
+          💡 Dica: Você também pode clicar com o botão direito na imagem para copiar ou salvar.
+        </span>
+        <div style="display: flex; gap: 0.75rem;">
+          <button type="button" id="copy-image-btn" class="btn-secondary" style="display: flex; align-items: center; gap: 0.4rem; font-weight: 700;">
+            📋 Copiar Imagem
+          </button>
+          <button type="button" id="download-final-png-btn" class="btn-primary" style="background: linear-gradient(135deg, #00b894, #00cec9); color: #fff; font-weight: 700; display: flex; align-items: center; gap: 0.4rem;">
+            💾 Baixar Imagem (PNG)
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Image Hover Preview Popup -->
   <div id="image-hover-preview" style="display: none;">
     <img id="image-hover-preview-img" src="" alt="Preview" />
@@ -385,7 +418,7 @@
   <!-- External libraries and scripts -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js?v=37"></script>
-  <script src="tierlist.js?v=37"></script>
+  <script src="config.js?v=39"></script>
+  <script src="tierlist.js?v=39"></script>
 </body>
 </html>
