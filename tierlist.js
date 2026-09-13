@@ -37,8 +37,22 @@
     if (tier && typeof tier.minScore === "number" && !isNaN(tier.minScore)) {
       return tier.minScore;
     }
-    const defaults = [9.0, 7.5, 5.5, 3.5, 1.5, 0.0];
-    if (typeof index === "number" && index < defaults.length) return defaults[index];
+    const n = Math.max(1, totalRows || (tiersData ? tiersData.length : 6));
+    if (n === 6) {
+      const defaults = [9.0, 7.5, 5.5, 3.5, 1.5, 0.0];
+      if (typeof index === "number" && index < defaults.length) return defaults[index];
+    } else if (n === 7) {
+      const defaults = [9.0, 7.5, 6.0, 4.5, 3.0, 1.5, 0.0];
+      if (typeof index === "number" && index < defaults.length) return defaults[index];
+    } else if (n === 5) {
+      const defaults = [8.5, 7.0, 5.0, 3.0, 0.0];
+      if (typeof index === "number" && index < defaults.length) return defaults[index];
+    }
+    if (typeof index === "number") {
+      const step = 10 / n;
+      const score = Math.round((10 - (index + 1) * step) * 10) / 10;
+      return Math.max(0.0, Math.min(10.0, score));
+    }
     return 0.0;
   }
 
@@ -198,7 +212,9 @@
     const creator = (activeBoardCreatedBy || "").trim().toLowerCase();
 
     if (!sessionUser) return false;
-    return sessionUser === "lele" || (creator && sessionUser === creator);
+    if (sessionUser === "lele") return true;
+    if (!creator || creator === "anônimo" || creator === sessionUser) return true;
+    return false;
   }
 
   function canUserEditActiveBoard() {
@@ -632,8 +648,8 @@
     }, 2500);
   }
 
-  async function autoSaveFeaturedBoard() {
-    if (!supabase || !activeBoardId || !activeBoardIsFeatured) return;
+  async function autoSaveActiveBoard() {
+    if (!supabase || !activeBoardId) return;
 
     try {
       const row_metadata = [];
@@ -645,10 +661,16 @@
         });
       });
 
-      row_metadata.push({
-        is_featured: true,
-        ratings: activeBoardRatings
-      });
+      if (activeBoardIsFeatured) {
+        row_metadata.push({
+          is_featured: true,
+          ratings: activeBoardRatings
+        });
+      } else if (Object.keys(activeBoardRatings).length > 0) {
+        row_metadata.push({
+          ratings: activeBoardRatings
+        });
+      }
 
       if (Array.isArray(activeBoardParameters) && activeBoardParameters.length > 0) {
         row_metadata.push({
@@ -665,7 +687,7 @@
       const upsertPayload = {
         id: activeBoardId,
         title: boardTitle,
-        created_by: activeBoardCreatedBy || "Global",
+        created_by: activeBoardCreatedBy || loadSessionUser() || "Anônimo",
         tiers: tiersData,
         bank: bankData,
         row_metadata: row_metadata,
@@ -674,17 +696,23 @@
 
       const { error } = await supabase.from("tier_lists").upsert(upsertPayload);
       if (error) {
-        console.warn("Erro ao auto-salvar tabuleiro em destaque no Supabase:", error);
+        console.warn("Erro ao auto-salvar tabuleiro no Supabase:", error);
       } else {
         showAutoSaveToast("⭐ Voto e tabuleiro salvos automaticamente!");
       }
     } catch (err) {
-      console.warn("Erro ao auto-salvar tabuleiro em destaque:", err);
+      console.warn("Erro ao auto-salvar tabuleiro:", err);
     }
   }
 
   async function submitItemRating(itemId, score, paramScores) {
-    if (!activeBoardId || !itemId) return;
+    if (!activeBoardId) {
+      activeBoardId = "tl-" + Date.now().toString(36) + "-" + Math.random().toString(36).substr(2, 5);
+    }
+    if (!itemId && activeRatingItem && activeRatingItem.id) {
+      itemId = activeRatingItem.id;
+    }
+    if (!itemId) return;
 
     if (!canUserVoteOnActiveBoard()) {
       const creatorName = activeBoardCreatedBy || "o criador";
@@ -756,8 +784,8 @@
 
     // Fallback to activeRatingItem or DOM
     if (!itemObj) {
-      if (activeRatingItem && activeRatingItem.id === itemId) {
-        itemObj = { id: activeRatingItem.id, src: activeRatingItem.src, title: activeRatingItem.title || "" };
+      if (activeRatingItem && (activeRatingItem.id === itemId || !activeRatingItem.id)) {
+        itemObj = { id: itemId, src: activeRatingItem.src, title: activeRatingItem.title || "" };
       } else {
         const domImg = document.querySelector(`.tier-item-img[data-id="${itemId}"]`);
         if (domImg) {
@@ -768,6 +796,7 @@
 
     // 4. Remove item from bankData and unvotedBankData, and from all tiers
     if (itemObj) {
+      itemObj.id = itemId;
       bankData = bankData.filter(it => it.id !== itemId);
       unvotedBankData = unvotedBankData.filter(it => it.id !== itemId);
       tiersData.forEach(t => {
@@ -795,7 +824,7 @@
       }
     }
 
-    // 5. Auto re-sort board items across rows and within rows based on average scores (0-10 scale)
+    // 5. Auto re-sort board items across rows and within rows based on average scores
     applyFeaturedAutoSorting();
     renderBoard();
     renderBank();
@@ -803,7 +832,7 @@
     saveBoardState();
 
     // 6. Save to Supabase featured_ratings table & auto-save board state
-    if (supabase) {
+    if (supabase && activeBoardId) {
       try {
         await supabase.from("featured_ratings").upsert({
           id: recordId,
@@ -817,9 +846,7 @@
         console.warn("Erro ao salvar nota em featured_ratings:", err);
       }
 
-      if (activeBoardIsFeatured) {
-        await autoSaveFeaturedBoard();
-      }
+      await autoSaveActiveBoard();
     }
   }
 
@@ -869,33 +896,20 @@
       }
     }
 
-    // 3. Re-sort if featured, save state and re-render board
-    if (activeBoardIsFeatured) {
-      applyFeaturedAutoSorting();
-      if (supabase) {
-        await autoSaveFeaturedBoard();
-      }
-    } else {
-      renderBoard();
-      renderBank();
-      renderUnvotedBank();
+    // 3. Re-sort, auto-save state and re-render board
+    applyFeaturedAutoSorting();
+    if (supabase && activeBoardId) {
+      await autoSaveActiveBoard();
     }
+    renderBoard();
+    renderBank();
+    renderUnvotedBank();
     saveBoardState();
 
     alert(`Voto de "${targetUserName}" foi removido com sucesso!`);
   }
 
   function applyFeaturedAutoSorting() {
-    // Record where unvoted items currently are (for personal non-featured tier lists)
-    const unvotedTierMap = {};
-    tiersData.forEach((tier, tIdx) => {
-      if (Array.isArray(tier.items)) {
-        tier.items.forEach(it => {
-          unvotedTierMap[it.id] = tIdx;
-        });
-      }
-    });
-
     // Collect all placed items and unvoted bank items
     const allPlacedItems = [];
     tiersData.forEach(tier => {
@@ -912,6 +926,9 @@
     if (Array.isArray(bankData)) {
       const remainingBank = [];
       bankData.forEach(item => {
+        if (!item.id) {
+          item.id = "item-" + Date.now().toString(36) + "-" + Math.random().toString(36).substr(2, 5);
+        }
         const stats = getItemRatingStats(item.id);
         if (stats.count > 0) {
           allPlacedItems.push(item);
@@ -921,6 +938,13 @@
       });
       bankData = remainingBank;
     }
+
+    // Ensure all items have an ID
+    allPlacedItems.forEach(item => {
+      if (!item.id) {
+        item.id = "item-" + Date.now().toString(36) + "-" + Math.random().toString(36).substr(2, 5);
+      }
+    });
 
     if (allPlacedItems.length === 0) return;
 
@@ -942,7 +966,7 @@
 
     const numRows = tiersData.length;
 
-    // Distribute items into tier rows if voted, or into unvotedBankData (or keep in tier for personal boards)
+    // Distribute items: voted items to tiersData, unvoted items ALWAYS to unvotedBankData ("Aguardando Aprovação")
     uniqueItems.forEach(item => {
       const stats = getItemRatingStats(item.id);
       if (stats.count > 0) {
@@ -959,12 +983,8 @@
           tiersData[targetRowIndex].items.push(item);
         }
       } else {
-        // 0 votes -> if personal board and was already in a tier, keep in that tier
-        if (!activeBoardIsFeatured && unvotedTierMap[item.id] !== undefined && tiersData[unvotedTierMap[item.id]]) {
-          tiersData[unvotedTierMap[item.id]].items.push(item);
-        } else {
-          unvotedBankData.push(item);
-        }
+        // Any item without votes goes to unvoted bank ("Aguardando Aprovação")
+        unvotedBankData.push(item);
       }
     });
 
@@ -992,6 +1012,17 @@
       const creatorName = activeBoardCreatedBy || "o criador";
       alert(`Apenas o criador deste tabuleiro (${creatorName}) pode votar nele.`);
       return;
+    }
+
+    if (!item.id) {
+      if (targetImgElement && targetImgElement.dataset.id) {
+        item.id = targetImgElement.dataset.id;
+      } else {
+        item.id = "item-" + Date.now().toString(36) + "-" + Math.random().toString(36).substr(2, 5);
+      }
+    }
+    if (targetImgElement) {
+      targetImgElement.dataset.id = item.id;
     }
     activeRatingItem = item;
 
@@ -1224,8 +1255,12 @@
   });
 
   function createItemElement(item) {
+    if (!item.id) {
+      item.id = "item-" + Date.now().toString(36) + "-" + Math.random().toString(36).substr(2, 5);
+    }
     const wrapper = document.createElement("div");
     wrapper.className = "tier-item-wrapper";
+    wrapper.dataset.id = item.id;
     wrapper.style.position = "relative";
     wrapper.style.display = "inline-flex";
     wrapper.style.alignItems = "center";
@@ -1234,7 +1269,7 @@
     const img = document.createElement("img");
     img.className = "tier-item-img";
     img.src = item.src;
-    img.dataset.id = item.id || ("item-" + Date.now().toString(36) + "-" + Math.random().toString(36).substr(2, 5));
+    img.dataset.id = item.id;
     img.title = item.title || "";
     img.draggable = true;
 
@@ -1447,6 +1482,20 @@
         }
       }
       saveBoardState();
+
+      if (draggedEl && zone.classList.contains("tier-items")) {
+        const img = draggedEl.querySelector(".tier-item-img") || draggedEl;
+        const itemId = img.dataset.id;
+        const stats = getItemRatingStats(itemId);
+        if (stats.count === 0) {
+          const item = {
+            id: itemId,
+            src: img.src,
+            title: img.title || ""
+          };
+          openInlineRatingCard(item, img);
+        }
+      }
     });
   }
 
@@ -3310,7 +3359,7 @@ CREATE POLICY "Allow delete" ON public.tier_lists FOR DELETE USING (true);</pre>
       editScreen.style.display = "flex";
       activeTierlistTitle.textContent = boardTitle;
 
-      if (activeBoardId && activeBoardIsFeatured && supabase) {
+      if (activeBoardId && supabase) {
         try {
           const { data: details } = await supabase
             .from("tier_lists")
@@ -3339,6 +3388,7 @@ CREATE POLICY "Allow delete" ON public.tier_lists FOR DELETE USING (true);</pre>
         }
       }
 
+      applyFeaturedAutoSorting();
       renderBoard();
       renderBank();
       renderUnvotedBank();
