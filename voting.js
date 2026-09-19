@@ -59,6 +59,18 @@
   const usersListContainer = document.getElementById("users-list-container");
   const usersEmptyMsg = document.getElementById("users-empty-msg");
 
+  // User Galleries Elements
+  const galleryOwnerSelect = document.getElementById("gallery-owner-select");
+  const galleryTabsContainer = document.getElementById("gallery-tabs-container");
+  const createGalleryBtn = document.getElementById("create-gallery-btn");
+  const createGalleryOverlay = document.getElementById("create-gallery-overlay");
+  const newGalleryNameInput = document.getElementById("new-gallery-name-input");
+  const newGalleryIconInput = document.getElementById("new-gallery-icon-input");
+  const cancelCreateGalleryBtn = document.getElementById("cancel-create-gallery-btn");
+  const confirmCreateGalleryBtn = document.getElementById("confirm-create-gallery-btn");
+  const deleteCurrentGalleryBtn = document.getElementById("delete-current-gallery-btn");
+  const votingGalleryTitle = document.getElementById("voting-gallery-title");
+
   let cards = [];
   let users = []; // each: { name, votedCardIds: [] }
   let currentUsername = null;
@@ -66,8 +78,58 @@
   let editingCardId = null;
   let editingImageDataUrl = null;
 
-  // Category State
-  let currentCategory = "games"; // "games" or "anime"
+  // Multi-User Galleries State
+  const DEFAULT_LELE_GALLERIES = [
+    { owner: "lele", slug: "games", name: "Games", icon: "🎮" },
+    { owner: "lele", slug: "anime", name: "Anime", icon: "🍿" },
+    { owner: "lele", slug: "filmes", name: "Filmes", icon: "🎬" }
+  ];
+
+  let customGalleries = []; // Array of { owner, slug, name, icon }
+  let currentGalleryOwner = "lele";
+  let currentGallerySlug = "games";
+
+  function getAllGalleries() {
+    const list = [...DEFAULT_LELE_GALLERIES];
+    customGalleries.forEach(cg => {
+      const exists = list.some(g => g.owner.toLowerCase() === cg.owner.toLowerCase() && g.slug.toLowerCase() === cg.slug.toLowerCase());
+      if (!exists) {
+        list.push(cg);
+      }
+    });
+    return list;
+  }
+
+  function getActiveGallery() {
+    const all = getAllGalleries();
+    const found = all.find(g => g.owner.toLowerCase() === currentGalleryOwner.toLowerCase() && g.slug.toLowerCase() === currentGallerySlug.toLowerCase());
+    if (found) return found;
+    const fallback = all.find(g => g.owner.toLowerCase() === currentGalleryOwner.toLowerCase()) || all[0];
+    if (fallback) {
+      currentGalleryOwner = fallback.owner;
+      currentGallerySlug = fallback.slug;
+    }
+    return fallback || DEFAULT_LELE_GALLERIES[0];
+  }
+
+  function cardBelongsToGallery(card, owner, slug) {
+    const cid = card.id || "";
+    const lowerOwner = (owner || "").toLowerCase();
+    const lowerSlug = (slug || "").toLowerCase();
+
+    if (lowerOwner === "lele") {
+      if (lowerSlug === "games") {
+        return !cid.startsWith("anime_") && !cid.startsWith("filmes_") && !cid.startsWith("u_");
+      } else if (lowerSlug === "anime") {
+        return cid.startsWith("anime_");
+      } else if (lowerSlug === "filmes") {
+        return cid.startsWith("filmes_");
+      }
+    }
+
+    const prefix = `u_${lowerOwner}__${lowerSlug}_`;
+    return cid.startsWith(prefix);
+  }
 
   // Image cache and fetching state
   const imageCache = {}; // cardId -> base64 or 'none'
@@ -82,10 +144,31 @@
     try {
       const { data, error } = await supabase.from("users").select("*");
       if (error) throw error;
-      users = (data || []).map(u => ({
-        name: u.name,
-        votedCardIds: u.voted_card_ids || []
-      }));
+      
+      const normalUsers = [];
+      customGalleries = [];
+
+      (data || []).forEach(u => {
+        if (u.name.startsWith("__gallery_def__")) {
+          // Parse saved gallery definition
+          try {
+            const rawJson = (u.voted_card_ids || []).join("");
+            const parsed = JSON.parse(rawJson);
+            if (parsed && parsed.owner && parsed.slug) {
+              customGalleries.push(parsed);
+            }
+          } catch (e) {
+            console.warn("Erro ao fazer parse da galeria customizada:", u.name, e);
+          }
+        } else {
+          normalUsers.push({
+            name: u.name,
+            votedCardIds: u.voted_card_ids || []
+          });
+        }
+      });
+
+      users = normalUsers;
     } catch (e) {
       console.error("Erro ao carregar usuários:", e);
       users = [];
@@ -122,6 +205,117 @@
     return user;
   }
 
+  function renderGalleriesNavigation() {
+    const allGalleries = getAllGalleries();
+
+    // 1. Gather distinct owners
+    const ownersMap = new Map();
+    // Ensure 'lele' is always first
+    ownersMap.set("lele", 0);
+
+    allGalleries.forEach(g => {
+      const o = g.owner.toLowerCase();
+      ownersMap.set(o, (ownersMap.get(o) || 0) + 1);
+    });
+
+    // Also include logged in user even if they haven't created any custom galleries yet
+    if (currentUsername) {
+      const curLower = currentUsername.toLowerCase();
+      if (!ownersMap.has(curLower)) {
+        ownersMap.set(curLower, 0);
+      }
+    }
+
+    // Populate galleryOwnerSelect
+    if (galleryOwnerSelect) {
+      const prevOwner = currentGalleryOwner.toLowerCase();
+      galleryOwnerSelect.innerHTML = "";
+
+      const sortedOwners = Array.from(ownersMap.keys()).sort((a, b) => {
+        if (a === "lele") return -1;
+        if (b === "lele") return 1;
+        return a.localeCompare(b);
+      });
+
+      sortedOwners.forEach(ownerKey => {
+        const opt = document.createElement("option");
+        opt.value = ownerKey;
+        const count = allGalleries.filter(g => g.owner.toLowerCase() === ownerKey).length;
+        const displayName = (ownerKey === "lele") ? "lele (Oficial)" : ownerKey;
+        opt.textContent = `${displayName} (${count} ${count === 1 ? 'galeria' : 'galerias'})`;
+        if (ownerKey === prevOwner) {
+          opt.selected = true;
+        }
+        galleryOwnerSelect.appendChild(opt);
+      });
+
+      // Ensure currentGalleryOwner is valid
+      if (!ownersMap.has(currentGalleryOwner.toLowerCase())) {
+        currentGalleryOwner = sortedOwners[0] || "lele";
+      }
+    }
+
+    // 2. Render gallery tabs for currentGalleryOwner
+    if (galleryTabsContainer) {
+      galleryTabsContainer.innerHTML = "";
+      const ownerGalleries = allGalleries.filter(g => g.owner.toLowerCase() === currentGalleryOwner.toLowerCase());
+
+      if (ownerGalleries.length === 0) {
+        galleryTabsContainer.innerHTML = `
+          <p style="color: var(--text-muted); font-size: 0.85rem; padding: 0.5rem 1rem; margin: 0;">
+            Nenhuma galeria criada por este usuário ainda.
+          </p>
+        `;
+      } else {
+        // Ensure currentGallerySlug belongs to this owner
+        if (!ownerGalleries.some(g => g.slug.toLowerCase() === currentGallerySlug.toLowerCase())) {
+          currentGallerySlug = ownerGalleries[0].slug;
+        }
+
+        ownerGalleries.forEach(g => {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          const isActive = (g.slug.toLowerCase() === currentGallerySlug.toLowerCase());
+          btn.className = "gallery-tab" + (isActive ? " active" : "");
+          btn.dataset.owner = g.owner;
+          btn.dataset.slug = g.slug;
+          btn.innerHTML = `${g.icon || '📁'} ${escapeHtml(g.name)}`;
+          btn.addEventListener("click", () => {
+            currentGalleryOwner = g.owner;
+            currentGallerySlug = g.slug;
+            renderGalleriesNavigation();
+            updateUserBar();
+            renderCards();
+          });
+          galleryTabsContainer.appendChild(btn);
+        });
+      }
+    }
+
+    // 3. Update Delete Gallery Button visibility
+    if (deleteCurrentGalleryBtn) {
+      const activeG = getActiveGallery();
+      const isDefault = activeG.owner.toLowerCase() === "lele" && ["games", "anime", "filmes"].includes(activeG.slug.toLowerCase());
+      const canDelete = !isDefault && currentUsername && (
+        currentUsername.toLowerCase() === "lele" ||
+        currentUsername.toLowerCase() === activeG.owner.toLowerCase()
+      );
+      deleteCurrentGalleryBtn.style.display = canDelete ? "inline-block" : "none";
+    }
+
+    // 4. Update Header Title
+    if (votingGalleryTitle) {
+      const activeG = getActiveGallery();
+      votingGalleryTitle.textContent = `${activeG.icon || '📁'} Galeria de ${activeG.name} (${activeG.owner})`;
+    }
+
+    // 5. Update Form Badge
+    if (activeCategoryFormBadge) {
+      const activeG = getActiveGallery();
+      activeCategoryFormBadge.textContent = `${activeG.name} (${activeG.owner})`;
+    }
+  }
+
   function updateUserBar() {
     if (currentUsername) {
       userLoginForm.style.display = "none";
@@ -130,28 +324,19 @@
 
       const user = users.find(u => u.name.toLowerCase() === currentUsername.toLowerCase());
       
-      // Calculate category specific votes
+      // Calculate active gallery specific votes
       let categoryVotes = 0;
-      if (user) {
-        if (currentCategory === "anime") {
-          categoryVotes = user.votedCardIds.filter(id => id.startsWith("anime_")).length;
-        } else if (currentCategory === "filmes") {
-          categoryVotes = user.votedCardIds.filter(id => id.startsWith("filmes_")).length;
-        } else {
-          categoryVotes = user.votedCardIds.filter(id => !id.startsWith("anime_") && !id.startsWith("filmes_")).length;
-        }
+      if (user && Array.isArray(user.votedCardIds)) {
+        categoryVotes = user.votedCardIds.filter(id => {
+          return cardBelongsToGallery({ id }, currentGalleryOwner, currentGallerySlug);
+        }).length;
       }
       activeUserVotes.textContent = categoryVotes;
 
       const categoryLabelEl = document.getElementById("active-user-votes-category");
       if (categoryLabelEl) {
-        if (currentCategory === "anime") {
-          categoryLabelEl.textContent = "Anime";
-        } else if (currentCategory === "filmes") {
-          categoryLabelEl.textContent = "Filmes";
-        } else {
-          categoryLabelEl.textContent = "Games";
-        }
+        const activeG = getActiveGallery();
+        categoryLabelEl.textContent = `${activeG.name}`;
       }
     } else {
       userLoginForm.style.display = "flex";
@@ -174,9 +359,9 @@
     const isAdmin = currentUsername && currentUsername.toLowerCase() === "lele";
 
     sortedUsers.forEach((user) => {
-      const gamesCount = user.votedCardIds.filter(id => !id.startsWith("anime_") && !id.startsWith("filmes_")).length;
-      const animeCount = user.votedCardIds.filter(id => id.startsWith("anime_")).length;
-      const filmesCount = user.votedCardIds.filter(id => id.startsWith("filmes_")).length;
+      const activeG = getActiveGallery();
+      const currentGalleryVotes = user.votedCardIds.filter(id => cardBelongsToGallery({ id }, activeG.owner, activeG.slug)).length;
+      const totalVotes = user.votedCardIds.length;
       
       const el = document.createElement("div");
       el.className = "user-status-card";
@@ -192,7 +377,7 @@
         ${deleteBtnHtml}
         <span class="user-status-card__name">${escapeHtml(user.name)}</span>
         <span class="user-status-card__votes" style="font-size: 0.75rem;">
-          Games: <strong>${gamesCount}</strong>/20 | Anime: <strong>${animeCount}</strong>/20 | Filmes: <strong>${filmesCount}</strong>/20
+          Nesta galeria (${escapeHtml(activeG.name)}): <strong>${currentGalleryVotes}</strong>/20 | Total: <strong>${totalVotes}</strong> votos
         </span>
       `;
       usersListContainer.appendChild(el);
@@ -350,16 +535,11 @@
   // --- Rendering ---
   function renderCards() {
     const sortMode = cardSortSelect.value;
+    const activeG = getActiveGallery();
 
-    // Filter cards by category
+    // Filter cards by active gallery (owner + slug)
     const categoryCards = cards.filter(c => {
-      if (currentCategory === "anime") {
-        return c.id.startsWith("anime_");
-      } else if (currentCategory === "filmes") {
-        return c.id.startsWith("filmes_");
-      } else {
-        return !c.id.startsWith("anime_") && !c.id.startsWith("filmes_");
-      }
+      return cardBelongsToGallery(c, activeG.owner, activeG.slug);
     });
 
     const sorted = [...categoryCards];
@@ -374,13 +554,7 @@
 
     if (sorted.length === 0) {
       cardsEmptyMsg.hidden = false;
-      if (currentCategory === "anime") {
-        cardsEmptyMsg.textContent = "Nenhum anime adicionado ainda. Crie o primeiro acima!";
-      } else if (currentCategory === "filmes") {
-        cardsEmptyMsg.textContent = "Nenhum filme adicionado ainda. Crie o primeiro acima!";
-      } else {
-        cardsEmptyMsg.textContent = "Nenhum card adicionado ainda. Crie o primeiro acima!";
-      }
+      cardsEmptyMsg.textContent = `Nenhum card adicionado ainda na galeria "${activeG.name}" (${activeG.owner}). Crie o primeiro acima!`;
       return;
     }
     cardsEmptyMsg.hidden = true;
@@ -473,22 +647,14 @@
           return;
         }
 
-        // Check if 20 votes limit reached for active category
-        const categoryVotesCount = user.votedCardIds.filter(id => {
-          if (currentCategory === "anime") {
-            return id.startsWith("anime_");
-          } else if (currentCategory === "filmes") {
-            return id.startsWith("filmes_");
-          } else {
-            return !id.startsWith("anime_") && !id.startsWith("filmes_");
-          }
+        // Check if 20 votes limit reached for active gallery
+        const activeG = getActiveGallery();
+        const galleryVotesCount = user.votedCardIds.filter(id => {
+          return cardBelongsToGallery({ id }, activeG.owner, activeG.slug);
         }).length;
 
-        if (categoryVotesCount >= 20) {
-          let categoryName = "Games";
-          if (currentCategory === "anime") categoryName = "Anime";
-          if (currentCategory === "filmes") categoryName = "Filmes";
-          alert(`Você já esgotou seu limite de 20 votos para a categoria ${categoryName}!`);
+        if (galleryVotesCount >= 20) {
+          alert(`Você já esgotou seu limite de 20 votos para a galeria ${activeG.name} (${activeG.owner})!`);
           return;
         }
 
@@ -812,12 +978,21 @@
     }
 
     const description = cardDescInput.value.trim();
+    const activeG = getActiveGallery();
 
     let generatedId = generateId();
-    if (currentCategory === "anime") {
-      generatedId = `anime_${generatedId}`;
-    } else if (currentCategory === "filmes") {
-      generatedId = `filmes_${generatedId}`;
+    const lowerOwner = (activeG.owner || "").toLowerCase();
+    const lowerSlug = (activeG.slug || "").toLowerCase();
+
+    if (lowerOwner === "lele") {
+      if (lowerSlug === "anime") {
+        generatedId = `anime_${generatedId}`;
+      } else if (lowerSlug === "filmes") {
+        generatedId = `filmes_${generatedId}`;
+      }
+      // games keeps plain ID for backward compatibility
+    } else {
+      generatedId = `u_${lowerOwner}__${lowerSlug}_${generatedId}`;
     }
 
     const newCard = {
@@ -974,14 +1149,19 @@
     }
     currentUsername = name;
     await getOrCreateUser(currentUsername);
+    currentGalleryOwner = currentUsername;
     saveSession();
+    renderGalleriesNavigation();
     updateUserBar();
     renderCards();
   });
 
   logoutBtn.addEventListener("click", () => {
     currentUsername = null;
+    currentGalleryOwner = "lele";
+    currentGallerySlug = "games";
     saveSession();
+    renderGalleriesNavigation();
     updateUserBar();
     renderCards();
   });
@@ -1171,10 +1351,166 @@
         { event: "*", schema: "public", table: "users" },
         async () => {
           await loadUsers();
+          renderGalleriesNavigation();
           updateUserBar();
         }
       )
       .subscribe();
+  }
+
+  // --- Gallery Creation & Management Handlers ---
+  if (galleryOwnerSelect) {
+    galleryOwnerSelect.addEventListener("change", () => {
+      currentGalleryOwner = galleryOwnerSelect.value;
+      renderGalleriesNavigation();
+      updateUserBar();
+      renderCards();
+    });
+  }
+
+  if (createGalleryBtn) {
+    createGalleryBtn.addEventListener("click", () => {
+      if (!currentUsername) {
+        alert("Por favor, identifique-se com seu nome no topo da página antes de criar uma galeria!");
+        usernameInput.focus();
+        return;
+      }
+      newGalleryNameInput.value = "";
+      newGalleryIconInput.value = "📁";
+      if (createGalleryOverlay) createGalleryOverlay.hidden = false;
+      newGalleryNameInput.focus();
+    });
+  }
+
+  if (cancelCreateGalleryBtn) {
+    cancelCreateGalleryBtn.addEventListener("click", () => {
+      if (createGalleryOverlay) createGalleryOverlay.hidden = true;
+    });
+  }
+
+  // Quick select emoji buttons
+  document.querySelectorAll(".emoji-choice-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      if (newGalleryIconInput) {
+        newGalleryIconInput.value = btn.textContent.trim();
+      }
+    });
+  });
+
+  if (confirmCreateGalleryBtn) {
+    confirmCreateGalleryBtn.addEventListener("click", async () => {
+      const name = newGalleryNameInput.value.trim();
+      if (!name) {
+        newGalleryNameInput.focus();
+        return;
+      }
+
+      const icon = (newGalleryIconInput.value.trim()) || "📁";
+      const slug = name
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-z0-9]/g, "");
+
+      if (!slug) {
+        alert("Nome de galeria inválido.");
+        return;
+      }
+
+      const owner = currentUsername.trim();
+      const allG = getAllGalleries();
+      const exists = allG.some(g => g.owner.toLowerCase() === owner.toLowerCase() && g.slug.toLowerCase() === slug.toLowerCase());
+      if (exists) {
+        alert("Você já possui uma galeria com este nome/slug!");
+        return;
+      }
+
+      const newGalleryDef = {
+        owner: owner,
+        slug: slug,
+        name: name,
+        icon: icon
+      };
+
+      confirmCreateGalleryBtn.disabled = true;
+      confirmCreateGalleryBtn.textContent = "Criando...";
+
+      try {
+        const recordName = `__gallery_def__${owner.toLowerCase()}__${slug}`;
+        const jsonPayload = JSON.stringify(newGalleryDef);
+
+        const { error } = await supabase.from("users").upsert({
+          name: recordName,
+          voted_card_ids: [jsonPayload]
+        });
+
+        if (error) throw error;
+
+        customGalleries.push(newGalleryDef);
+        currentGalleryOwner = owner;
+        currentGallerySlug = slug;
+
+        if (createGalleryOverlay) createGalleryOverlay.hidden = true;
+        renderGalleriesNavigation();
+        updateUserBar();
+        renderCards();
+      } catch (err) {
+        console.error("Erro ao salvar nova galeria:", err);
+        alert("Erro ao criar galeria: " + (err.message || err));
+      } finally {
+        confirmCreateGalleryBtn.disabled = false;
+        confirmCreateGalleryBtn.textContent = "Criar Galeria";
+      }
+    });
+  }
+
+  // Delete current custom gallery
+  if (deleteCurrentGalleryBtn) {
+    deleteCurrentGalleryBtn.addEventListener("click", async () => {
+      const activeG = getActiveGallery();
+      const isDefault = activeG.owner.toLowerCase() === "lele" && ["games", "anime", "filmes"].includes(activeG.slug.toLowerCase());
+      if (isDefault) {
+        alert("As galerias oficiais padrão não podem ser excluídas.");
+        return;
+      }
+
+      const confirmDel = confirm(`Tem certeza de que deseja excluir a galeria "${activeG.name}" (${activeG.owner}) e todos os cards nela?`);
+      if (!confirmDel) return;
+
+      deleteCurrentGalleryBtn.disabled = true;
+      deleteCurrentGalleryBtn.textContent = "Excluindo...";
+
+      try {
+        // 1. Delete all cards belonging to this gallery
+        const toDelete = cards.filter(c => cardBelongsToGallery(c, activeG.owner, activeG.slug));
+        for (const card of toDelete) {
+          await supabase.from("cards").delete().eq("id", card.id);
+          delete imageCache[card.id];
+          delete imageFetchPromises[card.id];
+        }
+        cards = cards.filter(c => !cardBelongsToGallery(c, activeG.owner, activeG.slug));
+
+        // 2. Delete gallery record from users table
+        const recordName = `__gallery_def__${activeG.owner.toLowerCase()}__${activeG.slug.toLowerCase()}`;
+        await supabase.from("users").delete().eq("name", recordName);
+
+        customGalleries = customGalleries.filter(g => !(g.owner.toLowerCase() === activeG.owner.toLowerCase() && g.slug.toLowerCase() === activeG.slug.toLowerCase()));
+
+        // 3. Fallback to lele / games
+        currentGalleryOwner = "lele";
+        currentGallerySlug = "games";
+
+        renderGalleriesNavigation();
+        updateUserBar();
+        renderCards();
+      } catch (err) {
+        console.error("Erro ao excluir galeria:", err);
+        alert("Erro ao excluir galeria: " + (err.message || err));
+      } finally {
+        deleteCurrentGalleryBtn.disabled = false;
+        deleteCurrentGalleryBtn.textContent = "🗑️ Excluir Galeria";
+      }
+    });
   }
 
   // --- Init ---
@@ -1184,34 +1520,17 @@
     loadSession();
     if (currentUsername) {
       await getOrCreateUser(currentUsername);
+      currentGalleryOwner = currentUsername; // Default to active logged in user's galleries
+    } else {
+      currentGalleryOwner = "lele";
     }
+    currentGallerySlug = "games";
+
+    renderGalleriesNavigation();
     updateUserBar();
     initImageObserver();
     setupDragAndDrop(addDropZone, cardImageInput, showPreview);
     setupDragAndDrop(editDropZone, editImageInput, showEditPreview);
-
-    // Bind tab clicks using robust event delegation
-    document.addEventListener("click", (e) => {
-      const tab = e.target.closest(".gallery-tab");
-      if (!tab) return;
-
-      document.querySelectorAll(".gallery-tab").forEach(t => t.classList.remove("active"));
-      tab.classList.add("active");
-      currentCategory = tab.dataset.category;
-
-      // Update form badge
-        if (currentCategory === "anime") {
-          activeCategoryFormBadge.textContent = "Anime";
-        } else if (currentCategory === "filmes") {
-          activeCategoryFormBadge.textContent = "Filmes";
-        } else {
-          activeCategoryFormBadge.textContent = "Games";
-        }
-
-      // Re-render and update UI
-      updateUserBar();
-      renderCards();
-    });
 
     renderCards();
     setupRealtime();

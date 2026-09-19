@@ -657,6 +657,7 @@
         row_metadata.push({
           name: tier.name,
           color: tier.color,
+          minScore: (typeof tier.minScore === "number") ? tier.minScore : undefined,
           count: (tier.items || []).length
         });
       });
@@ -1709,8 +1710,8 @@
       applyFeaturedAutoSorting();
       saveBoardState();
 
-      if (activeBoardIsFeatured && supabase) {
-        await autoSaveFeaturedBoard();
+      if (supabase) {
+        await autoSaveActiveBoard();
       }
 
       showAutoSaveToast("📊 Requisitos de notas atualizados e tabuleiro re-ordenado!");
@@ -1917,11 +1918,92 @@
 
   // --- Supabase Cards Importing ---
 
-  openImportModalBtn.addEventListener("click", () => {
+  function cardBelongsToGallery(card, owner, slug) {
+    const cid = card.id || "";
+    const lowerOwner = (owner || "").toLowerCase();
+    const lowerSlug = (slug || "").toLowerCase();
+
+    if (lowerOwner === "lele") {
+      if (lowerSlug === "games") {
+        return !cid.startsWith("anime_") && !cid.startsWith("filmes_") && !cid.startsWith("u_");
+      } else if (lowerSlug === "anime") {
+        return cid.startsWith("anime_");
+      } else if (lowerSlug === "filmes") {
+        return cid.startsWith("filmes_");
+      }
+    }
+
+    const prefix = `u_${lowerOwner}__${lowerSlug}_`;
+    return cid.startsWith(prefix);
+  }
+
+  async function fetchCustomGalleries() {
+    if (!supabase) return [];
+    try {
+      const { data, error } = await supabase.from("users").select("name, voted_card_ids");
+      if (error) throw error;
+      const galleries = [];
+      (data || []).forEach(u => {
+        if (u.name && u.name.startsWith("__gallery_def__")) {
+          try {
+            const raw = (u.voted_card_ids || []).join("");
+            const parsed = JSON.parse(raw);
+            if (parsed && parsed.owner && parsed.slug) {
+              galleries.push(parsed);
+            }
+          } catch (e) {
+            console.warn("Erro ao fazer parse da galeria:", u.name, e);
+          }
+        }
+      });
+      return galleries;
+    } catch (e) {
+      console.error("Erro ao buscar galerias customizadas:", e);
+      return [];
+    }
+  }
+
+  openImportModalBtn.addEventListener("click", async () => {
     if (!supabase) {
       alert("A conexão com o banco de dados não está configurada!");
       return;
     }
+
+    // Load custom galleries dynamically into import modal
+    const customListEl = document.getElementById("dynamic-custom-galleries-import-list");
+    if (customListEl) {
+      customListEl.innerHTML = "";
+      const customGals = await fetchCustomGalleries();
+      customGals.forEach(g => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "btn-secondary";
+        btn.style.padding = "0.85rem";
+        btn.style.fontSize = "1rem";
+        btn.style.width = "100%";
+        btn.style.display = "flex";
+        btn.style.alignItems = "center";
+        btn.style.justifyContent = "center";
+        btn.style.gap = "0.5rem";
+
+        const iconSpan = document.createElement("span");
+        iconSpan.textContent = g.icon || "📁";
+        const nameStrong = document.createElement("strong");
+        nameStrong.textContent = g.name;
+        const ownerSpan = document.createElement("span");
+        ownerSpan.style.fontSize = "0.8rem";
+        ownerSpan.style.color = "var(--text-muted)";
+        ownerSpan.textContent = `(${g.owner})`;
+
+        btn.appendChild(iconSpan);
+        btn.appendChild(nameStrong);
+        btn.appendChild(ownerSpan);
+
+        btn.addEventListener("click", () => executeImport({ owner: g.owner, slug: g.slug }));
+        customListEl.appendChild(btn);
+      });
+    }
+
     importOverlay.hidden = false;
   });
 
@@ -1929,7 +2011,7 @@
     importOverlay.hidden = true;
   });
 
-  async function executeImport(category) {
+  async function executeImport(target) {
     importOverlay.hidden = true;
     try {
       let query = supabase.from("cards").select("id, title, image_data_url, votes");
@@ -1945,10 +2027,13 @@
       data.forEach(card => {
         if (!card.image_data_url) return;
 
-        // 1. Filter Category
-        if (category === "games" && (card.id.startsWith("anime_") || card.id.startsWith("filmes_"))) return;
-        if (category === "anime" && !card.id.startsWith("anime_")) return;
-        if (category === "filmes" && !card.id.startsWith("filmes_")) return;
+        // 1. Filter Category / Gallery
+        if (target === "games" && !cardBelongsToGallery(card, "lele", "games")) return;
+        if (target === "anime" && !cardBelongsToGallery(card, "lele", "anime")) return;
+        if (target === "filmes" && !cardBelongsToGallery(card, "lele", "filmes")) return;
+        if (typeof target === "object" && target.owner && target.slug) {
+          if (!cardBelongsToGallery(card, target.owner, target.slug)) return;
+        }
 
         // Check if already imported
         const exists = [...document.querySelectorAll(".tier-item-img")].some(
@@ -2338,12 +2423,14 @@
         id: rowId,
         name: labelName,
         color: color,
+        minScore: minScore,
         items: items
       });
 
       row_metadata.push({
         name: labelName,
         color: color,
+        minScore: minScore,
         count: items.length
       });
     });
@@ -2383,7 +2470,7 @@
         }
       }
 
-      // Preserve featured status, ratings, and unvotedBank inside row_metadata array
+      // Preserve featured status, ratings, parameters, and unvotedBank inside row_metadata array
       if (activeBoardIsFeatured) {
         row_metadata.push({
           is_featured: true,
@@ -2392,6 +2479,12 @@
       } else if (Object.keys(activeBoardRatings).length > 0) {
         row_metadata.push({
           ratings: activeBoardRatings
+        });
+      }
+
+      if (Array.isArray(activeBoardParameters) && activeBoardParameters.length > 0) {
+        row_metadata.push({
+          parameters: activeBoardParameters
         });
       }
 
@@ -2829,6 +2922,18 @@
             tiersData = JSON.parse(JSON.stringify(details.tiers || []));
             bankData = JSON.parse(JSON.stringify(details.bank || []));
 
+            // Restore minScore from row_metadata if missing in tiersData (for backward compatibility)
+            if (Array.isArray(details.row_metadata)) {
+              tiersData.forEach((tier, idx) => {
+                if (typeof tier.minScore !== "number") {
+                  const metaTier = details.row_metadata.find(m => m && m.name === tier.name && typeof m.minScore === "number");
+                  if (metaTier) {
+                    tier.minScore = metaTier.minScore;
+                  }
+                }
+              });
+            }
+
             let embeddedUnvoted = [];
             if (Array.isArray(details.row_metadata)) {
               const metaObj = details.row_metadata.find(m => m && m.unvoted_bank !== undefined);
@@ -3217,8 +3322,8 @@ CREATE POLICY "Allow delete" ON public.tier_lists FOR DELETE USING (true);</pre>
       activeBoardParameters = [...editingModalParameters];
       saveBoardState();
 
-      if (supabase && activeBoardIsFeatured) {
-        await autoSaveFeaturedBoard();
+      if (supabase) {
+        await autoSaveActiveBoard();
       }
 
       if (parametersOverlay) parametersOverlay.hidden = true;
@@ -3236,8 +3341,30 @@ CREATE POLICY "Allow delete" ON public.tier_lists FOR DELETE USING (true);</pre>
       : "<span>➕ Criar Novo Tabuleiro</span>";
   });
 
+  async function populateSetupCategories() {
+    if (!setupImportCategory || !supabase) return;
+    try {
+      const customGals = await fetchCustomGalleries();
+      const existingCustom = setupImportCategory.querySelectorAll("option[data-custom='true']");
+      existingCustom.forEach(opt => opt.remove());
+
+      customGals.forEach(g => {
+        const opt = document.createElement("option");
+        opt.value = `custom:${g.owner}:${g.slug}`;
+        opt.setAttribute("data-custom", "true");
+        opt.textContent = `${g.icon || "📁"} ${g.name} (${g.owner})`;
+        setupImportCategory.appendChild(opt);
+      });
+    } catch (e) {
+      console.warn("Erro ao popular categorias customizadas:", e);
+    }
+  }
+
   setupImportCheckbox.addEventListener("change", () => {
     setupImportOptions.style.display = setupImportCheckbox.checked ? "flex" : "none";
+    if (setupImportCheckbox.checked) {
+      populateSetupCategories();
+    }
   });
 
   startCreationBtn.addEventListener("click", async () => {
@@ -3276,9 +3403,15 @@ CREATE POLICY "Allow delete" ON public.tier_lists FOR DELETE USING (true);</pre>
         if (data && data.length > 0) {
           data.forEach(card => {
             if (!card.image_data_url) return;
-            if (category === "games" && (card.id.startsWith("anime_") || card.id.startsWith("filmes_"))) return;
-            if (category === "anime" && !card.id.startsWith("anime_")) return;
-            if (category === "filmes" && !card.id.startsWith("filmes_")) return;
+            if (category === "games" && !cardBelongsToGallery(card, "lele", "games")) return;
+            if (category === "anime" && !cardBelongsToGallery(card, "lele", "anime")) return;
+            if (category === "filmes" && !cardBelongsToGallery(card, "lele", "filmes")) return;
+            if (category.startsWith("custom:")) {
+              const parts = category.split(":");
+              const cOwner = parts[1];
+              const cSlug = parts[2];
+              if (!cardBelongsToGallery(card, cOwner, cSlug)) return;
+            }
             if (votesFilter === "voted" && (!card.votes || card.votes < 1)) return;
 
             bankData.push({

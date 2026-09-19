@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Roleta NMDP - Voting Gallery</title>
-  <link rel="stylesheet" href="style.css?v=15">
+  <link rel="stylesheet" href="style.css?v=16">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
@@ -94,14 +94,30 @@
       </div>
 
       <section class="voting-gallery">
-        <nav class="gallery-tabs">
-          <button type="button" class="gallery-tab active" data-category="games">🎮 Games</button>
-          <button type="button" class="gallery-tab" data-category="anime">🍿 Anime</button>
-          <button type="button" class="gallery-tab" data-category="filmes">🎬 Filmes</button>
+        <!-- User Galleries Selector Header -->
+        <div class="user-galleries-header">
+          <div class="gallery-owner-select-group">
+            <label class="label-inline" for="gallery-owner-select">👤 Ver galerias de:</label>
+            <select id="gallery-owner-select" class="input-text-sm gallery-owner-select">
+              <!-- Populated by JS -->
+            </select>
+          </div>
+          <button type="button" id="create-gallery-btn" class="btn-primary-sm btn-create-gallery">
+            ➕ Nova Galeria
+          </button>
+        </div>
+
+        <nav class="gallery-tabs" id="gallery-tabs-container">
+          <!-- Populated dynamically by JS -->
         </nav>
 
         <div class="voting-gallery-header">
-          <h2 class="voting-title">Galeria de Votos</h2>
+          <div style="display: flex; align-items: center; gap: 0.75rem;">
+            <h2 class="voting-title" id="voting-gallery-title">Galeria de Votos</h2>
+            <button type="button" id="delete-current-gallery-btn" class="btn-danger-sm" style="display: none;" title="Excluir esta galeria e todos os seus cards">
+              🗑️ Excluir Galeria
+            </button>
+          </div>
           <div class="voting-sort-row">
             <label class="label" for="card-sort-select" style="margin-bottom:0;">Ordenar:</label>
             <select id="card-sort-select">
@@ -110,10 +126,46 @@
             </select>
           </div>
         </div>
-        <p id="cards-empty-msg" class="cards-empty-msg">Nenhum card adicionado ainda. Crie o primeiro acima!</p>
+        <p id="cards-empty-msg" class="cards-empty-msg">Nenhum card adicionado ainda nesta galeria. Crie o primeiro acima!</p>
         <div id="cards-container" class="cards-grid"></div>
       </section>
     </main>
+  </div>
+
+  <!-- Create New Gallery Modal Overlay -->
+  <div class="edit-overlay" id="create-gallery-overlay" hidden>
+    <div class="edit-modal" style="max-width: 440px;">
+      <h2 class="edit-modal__title">➕ Criar Nova Galeria</h2>
+      <p class="setting-desc" style="margin-bottom: 1.25rem;">
+        Crie uma galeria personalizada para seu perfil. Você poderá adicionar cards e qualquer usuário poderá votar neles (com limite de até 20 votos)!
+      </p>
+
+      <div class="setting-group">
+        <label class="label" for="new-gallery-name-input">Nome da Galeria</label>
+        <input type="text" id="new-gallery-name-input" class="input-text" placeholder="Ex: Séries, Músicas, Desenhos..." maxlength="40" />
+      </div>
+
+      <div class="setting-group" style="margin-top: 1rem;">
+        <label class="label" for="new-gallery-icon-input">Ícone ou Emoji</label>
+        <div style="display: flex; gap: 0.5rem; align-items: center;">
+          <input type="text" id="new-gallery-icon-input" class="input-text" placeholder="Ex: 📺, 🎵, ⭐" maxlength="4" style="width: 80px; text-align: center; font-size: 1.25rem;" value="📁" />
+          <div class="emoji-quick-select" id="emoji-quick-select" style="display: flex; gap: 0.35rem; flex-wrap: wrap;">
+            <button type="button" class="btn-secondary-sm emoji-choice-btn">🎮</button>
+            <button type="button" class="btn-secondary-sm emoji-choice-btn">🍿</button>
+            <button type="button" class="btn-secondary-sm emoji-choice-btn">🎬</button>
+            <button type="button" class="btn-secondary-sm emoji-choice-btn">📺</button>
+            <button type="button" class="btn-secondary-sm emoji-choice-btn">🎵</button>
+            <button type="button" class="btn-secondary-sm emoji-choice-btn">📖</button>
+            <button type="button" class="btn-secondary-sm emoji-choice-btn">⭐</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="edit-modal__actions" style="margin-top: 1.5rem; display: flex; gap: 0.75rem; justify-content: flex-end;">
+        <button type="button" id="cancel-create-gallery-btn" class="btn-secondary">Cancelar</button>
+        <button type="button" id="confirm-create-gallery-btn" class="btn-primary">Criar Galeria</button>
+      </div>
+    </div>
   </div>
 
   <!-- Edit Card Modal Overlay -->
@@ -149,7 +201,7 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js?v=15"></script>
-  <script src="voting.js?v=15"></script>
+  <script src="config.js?v=16"></script>
+  <script src="voting.js?v=16"></script>
 </body>
 </html>

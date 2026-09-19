@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Roleta NMDP - Tier List</title>
-  <link rel="stylesheet" href="style.css?v=39">
+  <link rel="stylesheet" href="style.css?v=41">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
@@ -313,20 +313,23 @@
 
   <!-- Import Modal Overlay -->
   <div class="edit-overlay" id="import-overlay" hidden>
-    <div class="edit-modal" style="max-width: 420px; text-align: center;">
+    <div class="edit-modal" style="max-width: 460px; text-align: center;">
       <h2 class="edit-modal__title" style="margin-bottom: 0.5rem;">Importar da Galeria</h2>
-      <p class="setting-desc" style="margin-bottom: 1.5rem; color: var(--text-muted); font-size: 0.9rem;">Escolha qual galeria você deseja importar para o tabuleiro:</p>
+      <p class="setting-desc" style="margin-bottom: 1.25rem; color: var(--text-muted); font-size: 0.9rem;">Escolha qual galeria você deseja importar para o tabuleiro:</p>
       
-      <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+      <div id="import-galleries-choices" style="display: flex; flex-direction: column; gap: 0.75rem; max-height: 340px; overflow-y: auto; padding-right: 4px;">
         <button type="button" id="import-games-choice-btn" class="btn-primary" style="background: linear-gradient(135deg, var(--accent), #8c7ae6); padding: 0.85rem; font-size: 1rem; width: 100%;">
-          🎮 Importar Galeria de Games
+          🎮 Games (lele)
         </button>
         <button type="button" id="import-anime-choice-btn" class="btn-primary" style="background: linear-gradient(135deg, #ff7675, #ff7fbf); padding: 0.85rem; font-size: 1rem; width: 100%;">
-          🍿 Importar Galeria de Animes
+          🍿 Anime (lele)
         </button>
         <button type="button" id="import-filmes-choice-btn" class="btn-primary" style="background: linear-gradient(135deg, #0984e3, #74b9ff); padding: 0.85rem; font-size: 1rem; width: 100%;">
-          🎬 Importar Galeria de Filmes
+          🎬 Filmes (lele)
         </button>
+        <div id="dynamic-custom-galleries-import-list" style="display: flex; flex-direction: column; gap: 0.75rem;">
+          <!-- Custom user galleries populated by JS -->
+        </div>
         <button type="button" id="import-all-choice-btn" class="btn-secondary" style="padding: 0.85rem; font-size: 1rem; width: 100%; border: 1px dashed var(--border);">
           🌐 Importar Todas as Galerias
         </button>
@@ -419,6 +422,6 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js?v=40"></script>
-  <script src="tierlist.js?v=40"></script>
+  <script src="tierlist.js?v=41"></script>
 </body>
 </html>

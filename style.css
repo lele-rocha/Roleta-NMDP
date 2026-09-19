@@ -130,31 +130,83 @@ body {
   border-radius: 2px 2px 0 0;
 }
 
+/* User Galleries Header & Controls */
+.user-galleries-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+  padding: 0.75rem 1rem;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.gallery-owner-select-group {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.gallery-owner-select {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.4rem 0.8rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.gallery-owner-select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+.btn-create-gallery {
+  background: linear-gradient(135deg, var(--accent), #a29bfe);
+  color: #fff;
+  border: none;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.2s;
+}
+
+.btn-create-gallery:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px var(--accent-glow);
+}
+
 /* Gallery Tabs Segment Selector */
 .gallery-tabs {
   display: flex;
+  flex-wrap: wrap;
   background: var(--surface-raised);
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 4px;
-  gap: 4px;
-  margin-bottom: 2rem;
-  max-width: 320px;
+  gap: 6px;
+  margin-bottom: 1.75rem;
+  max-width: 100%;
 }
 
 .gallery-tab {
   all: unset;
-  flex: 1;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  padding: 0.6rem 1.25rem;
+  padding: 0.55rem 1.25rem;
   border: none;
   background: transparent;
   color: var(--text-muted);
   font-family: inherit;
-  font-size: 0.95rem;
+  font-size: 0.92rem;
   font-weight: 700;
   border-radius: 8px;
   cursor: pointer;
@@ -166,7 +218,7 @@ body {
 
 .gallery-tab:hover:not(.active) {
   color: var(--text);
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .gallery-tab.active {
