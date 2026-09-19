@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Roleta NMDP - Voting Gallery</title>
-  <link rel="stylesheet" href="style.css?v=16">
+  <link rel="stylesheet" href="style.css?v=17">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
@@ -64,9 +64,10 @@
             <div class="setting-group" style="margin-bottom: 0.75rem;">
               <span class="setting-desc" style="font-size: 0.85rem; color: var(--text-muted);">Criando card na categoria: <strong id="active-category-form-badge" style="color: var(--accent); font-weight: 700; text-transform: uppercase;">Games</strong></span>
             </div>
-            <div class="setting-group">
+            <div class="setting-group" style="position: relative;">
               <label class="label" for="card-title-input">Título do Card</label>
-              <input type="text" id="card-title-input" class="input-text" placeholder="Digite o título" />
+              <input type="text" id="card-title-input" class="input-text" placeholder="Digite o título (sugestões de cards existentes aparecerão)" autocomplete="off" />
+              <div id="card-title-suggestions" class="suggestions-dropdown" hidden></div>
             </div>
 
             <div class="setting-group">
@@ -85,6 +86,9 @@
               <div id="card-image-preview" class="card-image-preview" hidden>
                 <img id="card-preview-img" src="" alt="Preview" />
                 <button type="button" id="remove-card-preview" class="btn-danger" style="margin-top:0.5rem;">Remover Imagem</button>
+              </div>
+              <div id="card-reused-notice" style="display: none; align-items: center; gap: 0.4rem; padding: 0.4rem 0.75rem; background: rgba(108, 92, 231, 0.15); border: 1px solid rgba(108, 92, 231, 0.4); border-radius: 6px; font-size: 0.8rem; color: #a29bfe; margin-top: 0.5rem;">
+                <span>🔗 Imagem vinculada do card existente (evita duplicar)</span>
               </div>
             </div>
 
@@ -111,23 +115,46 @@
           <!-- Populated dynamically by JS -->
         </nav>
 
-        <div class="voting-gallery-header">
-          <div style="display: flex; align-items: center; gap: 0.75rem;">
-            <h2 class="voting-title" id="voting-gallery-title">Galeria de Votos</h2>
-            <button type="button" id="delete-current-gallery-btn" class="btn-danger-sm" style="display: none;" title="Excluir esta galeria e todos os seus cards">
-              🗑️ Excluir Galeria
+        <div id="voting-gallery-normal-view">
+          <div class="voting-gallery-header">
+            <div style="display: flex; align-items: center; gap: 0.75rem;">
+              <h2 class="voting-title" id="voting-gallery-title">Galeria de Votos</h2>
+              <button type="button" id="delete-current-gallery-btn" class="btn-danger-sm" style="display: none;" title="Excluir esta galeria e todos os seus cards">
+                🗑️ Excluir Galeria
+              </button>
+            </div>
+            <div class="voting-sort-row">
+              <label class="label" for="card-sort-select" style="margin-bottom:0;">Ordenar:</label>
+              <select id="card-sort-select">
+                <option value="date">Data (Novos Primeiro)</option>
+                <option value="votes">Votos (Mais Votados)</option>
+              </select>
+            </div>
+          </div>
+          <p id="cards-empty-msg" class="cards-empty-msg">Nenhum card adicionado ainda nesta galeria. Crie o primeiro acima!</p>
+          <div id="cards-container" class="cards-grid"></div>
+        </div>
+
+        <!-- Untitled Images Curation Section (Exclusive for user 'lele') -->
+        <div id="untitled-curation-section" style="display: none; flex-direction: column; gap: 1.25rem; margin-top: 1rem;">
+          <div style="background: rgba(255, 165, 0, 0.06); border: 1px solid rgba(255, 165, 0, 0.35); border-radius: 12px; padding: 1.25rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+            <div>
+              <h3 style="margin: 0 0 0.4rem 0; color: #ff9f43; font-size: 1.15rem; display: flex; align-items: center; gap: 0.5rem;">
+                🏷️ Curadoria de Imagens Sem Título (Modo Admin: lele)
+              </h3>
+              <p style="margin: 0; color: var(--text-muted); font-size: 0.85rem; max-width: 650px;">
+                Estas imagens estão no sistema sem um título apropriado (ou com nome genérico). Digite o título correspondente e salve para associá-las e disponibilizá-las no autocomplete de todo o site, evitando duplicação!
+              </p>
+            </div>
+            <button type="button" id="refresh-curation-btn" class="btn-secondary" style="font-size: 0.85rem; padding: 0.5rem 0.85rem;">
+              🔄 Atualizar Lista
             </button>
           </div>
-          <div class="voting-sort-row">
-            <label class="label" for="card-sort-select" style="margin-bottom:0;">Ordenar:</label>
-            <select id="card-sort-select">
-              <option value="date">Data (Novos Primeiro)</option>
-              <option value="votes">Votos (Mais Votados)</option>
-            </select>
-          </div>
+          <p id="curation-empty-msg" class="cards-empty-msg" style="display: none;">
+            🎉 Incrível! Todas as imagens cadastradas no sistema já possuem títulos devidamente atribuídos!
+          </p>
+          <div id="curation-images-grid" class="cards-grid"></div>
         </div>
-        <p id="cards-empty-msg" class="cards-empty-msg">Nenhum card adicionado ainda nesta galeria. Crie o primeiro acima!</p>
-        <div id="cards-container" class="cards-grid"></div>
       </section>
     </main>
   </div>
@@ -202,6 +229,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js?v=16"></script>
-  <script src="voting.js?v=16"></script>
+  <script src="voting.js?v=17"></script>
 </body>
 </html>

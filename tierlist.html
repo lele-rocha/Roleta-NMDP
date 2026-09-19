@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Roleta NMDP - Tier List</title>
-  <link rel="stylesheet" href="style.css?v=41">
+  <link rel="stylesheet" href="style.css?v=42">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
@@ -228,6 +228,15 @@
             </button>
             <input type="file" id="tier-image-input" accept="image/*" multiple style="display: none;" />
           </div>
+
+          <!-- Quick Search & Autocomplete to Add Existing Card by Title -->
+          <div class="tier-card-search-wrapper" style="position: relative; margin-bottom: 0.85rem;">
+            <div style="display: flex; gap: 0.5rem; align-items: center;">
+              <input type="text" id="tier-search-card-input" class="input-text" placeholder="🔍 Buscar card existente por título para adicionar ao banco..." autocomplete="off" style="font-size: 0.85rem; padding: 0.5rem 0.75rem; width: 100%; border-radius: 8px;" />
+            </div>
+            <div id="tier-card-suggestions" class="suggestions-dropdown" hidden></div>
+          </div>
+
           <div id="unplaced-images-bank" class="unplaced-images-bank dropzone" data-bank="true">
             <p class="empty-bank-msg" style="color: var(--text-muted); font-size: 0.9rem; text-align: center; width: 100%; padding: 1rem 0;">
               O banco está vazio. Importe da galeria de votos, cole (Ctrl+V) ou clique em "Adicionar Imagens" acima!
@@ -386,8 +395,9 @@
 
   <!-- Floating Inline Rating Card (0.1 Step Precision) -->
   <div id="inline-rating-card" style="display: none; position: absolute; z-index: 99999; width: 290px; background: rgba(18, 20, 29, 0.96); backdrop-filter: blur(14px); border: 1px solid var(--accent); border-radius: 14px; padding: 1rem; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6); flex-direction: column; gap: 0.6rem; animation: popIn 0.2s cubic-bezier(0.4, 0, 0.2, 1);">
-    <div style="display: flex; justify-content: space-between; align-items: center;">
-      <span id="inline-rating-item-title" style="font-size: 0.85rem; font-weight: 700; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px;">Item</span>
+    <div style="display: flex; justify-content: space-between; align-items: center; gap: 0.5rem;">
+      <span id="inline-rating-item-title" style="font-size: 0.85rem; font-weight: 700; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; cursor: pointer;" title="Clique para editar o título deste item">Item</span>
+      <button type="button" id="edit-inline-item-title-btn" style="background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 0.85rem; padding: 2px 4px;" title="Editar título do item">✏️</button>
       <button type="button" id="close-inline-rating-btn" style="background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 1.1rem; padding: 0; line-height: 1;">✕</button>
     </div>
     
@@ -422,6 +432,6 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js?v=40"></script>
-  <script src="tierlist.js?v=41"></script>
+  <script src="tierlist.js?v=42"></script>
 </body>
 </html>

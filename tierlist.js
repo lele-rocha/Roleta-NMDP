@@ -1031,6 +1031,40 @@
       inlineRatingItemTitle.textContent = item.title || "Item sem título";
     }
 
+    const editInlineItemTitleBtn = document.getElementById("edit-inline-item-title-btn");
+    const handleRename = () => {
+      const currentTitle = item.title && !item.title.toLowerCase().startsWith("image.") ? item.title : "";
+      const newTitle = prompt("Digite o título/nome deste item:", currentTitle);
+      if (newTitle !== null && newTitle.trim()) {
+        item.title = newTitle.trim();
+        if (inlineRatingItemTitle) inlineRatingItemTitle.textContent = item.title;
+        if (targetImgElement) targetImgElement.title = item.title;
+
+        // Update title across board state
+        tiersData.forEach(t => {
+          (t.items || []).forEach(i => {
+            if (i.id === item.id || (i.src && i.src === item.src)) i.title = item.title;
+          });
+        });
+        bankData.forEach(i => {
+          if (i.id === item.id || (i.src && i.src === item.src)) i.title = item.title;
+        });
+        unvotedBankData.forEach(i => {
+          if (i.id === item.id || (i.src && i.src === item.src)) i.title = item.title;
+        });
+
+        saveBoardState();
+        autoSaveActiveBoard();
+      }
+    };
+
+    if (editInlineItemTitleBtn) {
+      editInlineItemTitleBtn.onclick = handleRename;
+    }
+    if (inlineRatingItemTitle) {
+      inlineRatingItemTitle.onclick = handleRename;
+    }
+
     const singleRatingContainer = document.getElementById("single-rating-container");
     const parametersRatingContainer = document.getElementById("parameters-rating-container");
     const inlineRatingValueLabel = document.getElementById("inline-rating-value-label");
@@ -1850,10 +1884,14 @@
       if (!file.type.startsWith("image/")) continue;
       try {
         const webpSrc = await convertToWebP(file);
+        let titleName = file.name.replace(/\.[^/.]+$/, ""); // strip extension
+        if (!titleName || titleName.toLowerCase() === "image" || titleName.toLowerCase() === "blob") {
+          titleName = "Novo Item";
+        }
         const item = {
           id: "item-" + Math.random().toString(36).slice(2, 9),
           src: webpSrc,
-          title: file.name
+          title: titleName
         };
 
         const imgEl = createItemElement(item);
@@ -1913,6 +1951,167 @@
 
     if (foundImage) {
       e.preventDefault();
+    }
+  });
+
+  // --- Search & Add Existing Cards by Title to Bank ---
+  const tierSearchCardInput = document.getElementById("tier-search-card-input");
+  const tierCardSuggestions = document.getElementById("tier-card-suggestions");
+  let cachedDbCardsForSearch = null;
+  let tierSearchTimeout = null;
+
+  async function getDbCardsForSearch() {
+    if (cachedDbCardsForSearch) return cachedDbCardsForSearch;
+    if (!supabase) return [];
+    try {
+      const { data, error } = await supabase.from("cards").select("id, title, image_data_url, votes");
+      if (error) throw error;
+      cachedDbCardsForSearch = data || [];
+      return cachedDbCardsForSearch;
+    } catch (e) {
+      console.warn("Erro ao buscar cards para pesquisa na tier list:", e);
+      return [];
+    }
+  }
+
+  if (tierSearchCardInput) {
+    tierSearchCardInput.addEventListener("input", () => {
+      clearTimeout(tierSearchTimeout);
+      tierSearchTimeout = setTimeout(renderTierSearchSuggestions, 120);
+    });
+
+    tierSearchCardInput.addEventListener("focus", () => {
+      if (tierSearchCardInput.value.trim().length >= 1) {
+        renderTierSearchSuggestions();
+      }
+    });
+
+    tierSearchCardInput.addEventListener("keydown", (e) => {
+      if (!tierCardSuggestions || tierCardSuggestions.hidden) return;
+      const items = tierCardSuggestions.querySelectorAll(".suggestion-item");
+      if (items.length === 0) return;
+      const activeItem = tierCardSuggestions.querySelector(".suggestion-item.active");
+      let activeIndex = Array.from(items).indexOf(activeItem);
+
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        if (activeItem) activeItem.classList.remove("active");
+        activeIndex = (activeIndex + 1) % items.length;
+        items[activeIndex].classList.add("active");
+        items[activeIndex].scrollIntoView({ block: "nearest" });
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        if (activeItem) activeItem.classList.remove("active");
+        activeIndex = (activeIndex - 1 + items.length) % items.length;
+        items[activeIndex].classList.add("active");
+        items[activeIndex].scrollIntoView({ block: "nearest" });
+      } else if (e.key === "Enter" && activeItem) {
+        e.preventDefault();
+        activeItem.dispatchEvent(new MouseEvent("mousedown"));
+      } else if (e.key === "Escape") {
+        tierCardSuggestions.hidden = true;
+      }
+    });
+  }
+
+  async function renderTierSearchSuggestions() {
+    if (!tierCardSuggestions || !tierSearchCardInput) return;
+    const query = tierSearchCardInput.value.trim().toLowerCase();
+    if (query.length < 1) {
+      tierCardSuggestions.innerHTML = "";
+      tierCardSuggestions.hidden = true;
+      return;
+    }
+
+    const allCards = await getDbCardsForSearch();
+    const matches = [];
+    for (const c of allCards) {
+      if (!c.title || !c.image_data_url) continue;
+      if (c.title.toLowerCase().includes(query)) {
+        matches.push(c);
+        if (matches.length >= 8) break;
+      }
+    }
+
+    if (matches.length === 0) {
+      tierCardSuggestions.innerHTML = "";
+      tierCardSuggestions.hidden = true;
+      return;
+    }
+
+    tierCardSuggestions.innerHTML = "";
+    matches.forEach(card => {
+      const item = document.createElement("div");
+      item.className = "suggestion-item";
+
+      const thumb = document.createElement("img");
+      thumb.className = "suggestion-thumb";
+      thumb.src = card.image_data_url;
+
+      const info = document.createElement("div");
+      info.className = "suggestion-info";
+
+      const titleEl = document.createElement("div");
+      titleEl.className = "suggestion-title";
+      const idx = card.title.toLowerCase().indexOf(query);
+      if (idx !== -1) {
+        const before = card.title.substring(0, idx);
+        const match = card.title.substring(idx, idx + query.length);
+        const after = card.title.substring(idx + query.length);
+        titleEl.innerHTML = `${before}<strong style="color:var(--accent); text-decoration:underline;">${match}</strong>${after}`;
+      } else {
+        titleEl.textContent = card.title;
+      }
+
+      const meta = document.createElement("div");
+      meta.className = "suggestion-meta";
+      meta.textContent = `Card cadastrado (${card.votes || 0} votos)`;
+
+      info.appendChild(titleEl);
+      info.appendChild(meta);
+      item.appendChild(thumb);
+      item.appendChild(info);
+
+      item.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        // Check if this card is already in the board / bank
+        const exists = [...document.querySelectorAll(".tier-item-img")].some(
+          img => img.src === card.image_data_url || img.dataset.id === "item-" + card.id
+        );
+
+        if (exists) {
+          alert(`O item "${card.title}" já está presente neste tabuleiro!`);
+          tierCardSuggestions.hidden = true;
+          return;
+        }
+
+        const newItem = {
+          id: "item-" + card.id,
+          src: card.image_data_url,
+          title: card.title
+        };
+
+        const imgEl = createItemElement(newItem);
+        bankContainer.appendChild(imgEl);
+        saveBoardState();
+
+        tierSearchCardInput.value = "";
+        tierCardSuggestions.innerHTML = "";
+        tierCardSuggestions.hidden = true;
+
+        // Auto save if active
+        autoSaveActiveBoard();
+      });
+
+      tierCardSuggestions.appendChild(item);
+    });
+
+    tierCardSuggestions.hidden = false;
+  }
+
+  document.addEventListener("click", (e) => {
+    if (tierCardSuggestions && !tierCardSuggestions.contains(e.target) && e.target !== tierSearchCardInput) {
+      tierCardSuggestions.hidden = true;
     }
   });
 

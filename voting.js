@@ -21,6 +21,13 @@
   const cardPreviewImg = document.getElementById("card-preview-img");
   const removeCardPreview = document.getElementById("remove-card-preview");
   const addDropZone = document.getElementById("add-card-drop-zone");
+  const cardTitleSuggestions = document.getElementById("card-title-suggestions");
+  const cardReusedNotice = document.getElementById("card-reused-notice");
+  const votingGalleryNormalView = document.getElementById("voting-gallery-normal-view");
+  const untitledCurationSection = document.getElementById("untitled-curation-section");
+  const curationImagesGrid = document.getElementById("curation-images-grid");
+  const curationEmptyMsg = document.getElementById("curation-empty-msg");
+  const refreshCurationBtn = document.getElementById("refresh-curation-btn");
 
   // Dropdown toggle controls
   const toggleControlsBtn = document.getElementById("toggle-controls-btn");
@@ -289,30 +296,62 @@
           });
           galleryTabsContainer.appendChild(btn);
         });
+
+        // Add exclusive Curation Tab for 'lele'
+        if (currentGalleryOwner.toLowerCase() === "lele" || (currentUsername && currentUsername.toLowerCase() === "lele")) {
+          const isCurating = (currentGallerySlug === "__curation_untitled__");
+          const curBtn = document.createElement("button");
+          curBtn.type = "button";
+          curBtn.className = "gallery-tab gallery-tab--curation" + (isCurating ? " active" : "");
+          curBtn.style.border = "1px dashed #ff9f43";
+          curBtn.style.color = isCurating ? "#fff" : "#ff9f43";
+          curBtn.innerHTML = `🏷️ Sem Título <span id="untitled-curation-tab-badge" style="background:#ff9f43; color:#000; font-size:0.75rem; font-weight:800; padding: 2px 6px; border-radius: 10px; margin-left: 4px;">...</span>`;
+          curBtn.addEventListener("click", () => {
+            currentGalleryOwner = "lele";
+            currentGallerySlug = "__curation_untitled__";
+            renderGalleriesNavigation();
+            updateUserBar();
+            renderCards();
+          });
+          galleryTabsContainer.appendChild(curBtn);
+          updateUntitledCountBadge();
+        }
       }
     }
 
     // 3. Update Delete Gallery Button visibility
     if (deleteCurrentGalleryBtn) {
-      const activeG = getActiveGallery();
-      const isDefault = activeG.owner.toLowerCase() === "lele" && ["games", "anime", "filmes"].includes(activeG.slug.toLowerCase());
-      const canDelete = !isDefault && currentUsername && (
-        currentUsername.toLowerCase() === "lele" ||
-        currentUsername.toLowerCase() === activeG.owner.toLowerCase()
-      );
-      deleteCurrentGalleryBtn.style.display = canDelete ? "inline-block" : "none";
+      if (currentGallerySlug === "__curation_untitled__") {
+        deleteCurrentGalleryBtn.style.display = "none";
+      } else {
+        const activeG = getActiveGallery();
+        const isDefault = activeG.owner.toLowerCase() === "lele" && ["games", "anime", "filmes"].includes(activeG.slug.toLowerCase());
+        const canDelete = !isDefault && currentUsername && (
+          currentUsername.toLowerCase() === "lele" ||
+          currentUsername.toLowerCase() === activeG.owner.toLowerCase()
+        );
+        deleteCurrentGalleryBtn.style.display = canDelete ? "inline-block" : "none";
+      }
     }
 
     // 4. Update Header Title
     if (votingGalleryTitle) {
-      const activeG = getActiveGallery();
-      votingGalleryTitle.textContent = `${activeG.icon || '📁'} Galeria de ${activeG.name} (${activeG.owner})`;
+      if (currentGallerySlug === "__curation_untitled__") {
+        votingGalleryTitle.textContent = `🏷️ Curadoria de Imagens Sem Título`;
+      } else {
+        const activeG = getActiveGallery();
+        votingGalleryTitle.textContent = `${activeG.icon || '📁'} Galeria de ${activeG.name} (${activeG.owner})`;
+      }
     }
 
     // 5. Update Form Badge
     if (activeCategoryFormBadge) {
-      const activeG = getActiveGallery();
-      activeCategoryFormBadge.textContent = `${activeG.name} (${activeG.owner})`;
+      if (currentGallerySlug === "__curation_untitled__") {
+        activeCategoryFormBadge.textContent = `Curadoria`;
+      } else {
+        const activeG = getActiveGallery();
+        activeCategoryFormBadge.textContent = `${activeG.name} (${activeG.owner})`;
+      }
     }
   }
 
@@ -534,6 +573,16 @@
 
   // --- Rendering ---
   function renderCards() {
+    if (currentGallerySlug === "__curation_untitled__") {
+      if (votingGalleryNormalView) votingGalleryNormalView.style.display = "none";
+      if (untitledCurationSection) untitledCurationSection.style.display = "flex";
+      loadAndRenderUntitledCuration();
+      return;
+    }
+
+    if (votingGalleryNormalView) votingGalleryNormalView.style.display = "block";
+    if (untitledCurationSection) untitledCurationSection.style.display = "none";
+
     const sortMode = cardSortSelect.value;
     const activeG = getActiveGallery();
 
@@ -842,7 +891,150 @@
     cardPreviewImg.src = "";
     cardImagePreview.hidden = true;
     cardImageInput.value = "";
+    if (cardReusedNotice) cardReusedNotice.style.display = "none";
   }
+
+  // --- Card Title Autocomplete & Duplicate Prevention ---
+  let titleSuggestionTimeout = null;
+  if (cardTitleInput) {
+    cardTitleInput.addEventListener("input", () => {
+      clearTimeout(titleSuggestionTimeout);
+      titleSuggestionTimeout = setTimeout(renderTitleSuggestions, 120);
+    });
+
+    cardTitleInput.addEventListener("focus", () => {
+      if (cardTitleInput.value.trim().length >= 1) {
+        renderTitleSuggestions();
+      }
+    });
+
+    cardTitleInput.addEventListener("keydown", (e) => {
+      if (!cardTitleSuggestions || cardTitleSuggestions.hidden) return;
+      const items = cardTitleSuggestions.querySelectorAll(".suggestion-item");
+      if (items.length === 0) return;
+      const activeItem = cardTitleSuggestions.querySelector(".suggestion-item.active");
+      let activeIndex = Array.from(items).indexOf(activeItem);
+
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        if (activeItem) activeItem.classList.remove("active");
+        activeIndex = (activeIndex + 1) % items.length;
+        items[activeIndex].classList.add("active");
+        items[activeIndex].scrollIntoView({ block: "nearest" });
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        if (activeItem) activeItem.classList.remove("active");
+        activeIndex = (activeIndex - 1 + items.length) % items.length;
+        items[activeIndex].classList.add("active");
+        items[activeIndex].scrollIntoView({ block: "nearest" });
+      } else if (e.key === "Enter" && activeItem) {
+        e.preventDefault();
+        activeItem.dispatchEvent(new MouseEvent("mousedown"));
+      } else if (e.key === "Escape") {
+        cardTitleSuggestions.hidden = true;
+      }
+    });
+  }
+
+  async function renderTitleSuggestions() {
+    if (!cardTitleSuggestions || !cardTitleInput) return;
+    const query = cardTitleInput.value.trim().toLowerCase();
+    if (query.length < 1) {
+      cardTitleSuggestions.innerHTML = "";
+      cardTitleSuggestions.hidden = true;
+      return;
+    }
+
+    // Filter matching cards (limit 8, unique by title)
+    const matches = [];
+    const seenTitles = new Set();
+    for (const c of cards) {
+      if (!c.title) continue;
+      const tLower = c.title.toLowerCase();
+      if (tLower.includes(query) && !seenTitles.has(tLower)) {
+        seenTitles.add(tLower);
+        matches.push(c);
+        if (matches.length >= 8) break;
+      }
+    }
+
+    if (matches.length === 0) {
+      cardTitleSuggestions.innerHTML = "";
+      cardTitleSuggestions.hidden = true;
+      return;
+    }
+
+    cardTitleSuggestions.innerHTML = "";
+    matches.forEach(card => {
+      const item = document.createElement("div");
+      item.className = "suggestion-item";
+
+      const thumb = document.createElement("img");
+      thumb.className = "suggestion-thumb";
+      if (imageCache[card.id] && imageCache[card.id] !== "none") {
+        thumb.src = imageCache[card.id];
+      } else {
+        thumb.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' fill='%23222'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-size='16' fill='%23666'%3E🖼️%3C/text%3E%3C/svg%3E";
+        fetchCardImage(card.id).then(url => {
+          if (url && url !== "none") thumb.src = url;
+        });
+      }
+
+      const info = document.createElement("div");
+      info.className = "suggestion-info";
+
+      const titleEl = document.createElement("div");
+      titleEl.className = "suggestion-title";
+      const idx = card.title.toLowerCase().indexOf(query);
+      if (idx !== -1) {
+        const before = card.title.substring(0, idx);
+        const match = card.title.substring(idx, idx + query.length);
+        const after = card.title.substring(idx + query.length);
+        titleEl.innerHTML = `${escapeHtml(before)}<strong style="color:var(--accent); text-decoration:underline;">${escapeHtml(match)}</strong>${escapeHtml(after)}`;
+      } else {
+        titleEl.textContent = card.title;
+      }
+
+      const meta = document.createElement("div");
+      meta.className = "suggestion-meta";
+      meta.textContent = `Card existente (${card.votes || 0} votos)`;
+
+      info.appendChild(titleEl);
+      info.appendChild(meta);
+      item.appendChild(thumb);
+      item.appendChild(info);
+
+      item.addEventListener("mousedown", async (e) => {
+        e.preventDefault();
+        cardTitleInput.value = card.title;
+        if (card.description && cardDescInput) {
+          cardDescInput.value = card.description;
+        }
+
+        let imgSrc = imageCache[card.id];
+        if (!imgSrc || imgSrc === "none") {
+          imgSrc = await fetchCardImage(card.id);
+        }
+        if (imgSrc && imgSrc !== "none") {
+          showPreview(imgSrc);
+          if (cardReusedNotice) cardReusedNotice.style.display = "flex";
+        }
+
+        cardTitleSuggestions.innerHTML = "";
+        cardTitleSuggestions.hidden = true;
+      });
+
+      cardTitleSuggestions.appendChild(item);
+    });
+
+    cardTitleSuggestions.hidden = false;
+  }
+
+  document.addEventListener("click", (e) => {
+    if (cardTitleSuggestions && !cardTitleSuggestions.contains(e.target) && e.target !== cardTitleInput) {
+      cardTitleSuggestions.hidden = true;
+    }
+  });
 
   function setupDragAndDrop(dropZone, fileInput, onImageProcessed) {
     if (!dropZone || !fileInput) return;
@@ -1510,6 +1702,296 @@
         deleteCurrentGalleryBtn.disabled = false;
         deleteCurrentGalleryBtn.textContent = "🗑️ Excluir Galeria";
       }
+    });
+  }
+
+  // --- Untitled Images Curation (Exclusive for user 'lele') ---
+  let cachedUntitledItems = [];
+
+  async function fetchAllUntitledItems() {
+    const untitledList = [];
+    const seenSrc = new Set();
+
+    // 1. Check cards in memory
+    cards.forEach(card => {
+      const t = (card.title || "").trim().toLowerCase();
+      const isUntitled = !t || 
+        t.startsWith("image.") || 
+        t.startsWith("image_") || 
+        t === "item sem título" || 
+        t === "sem titulo" ||
+        t === "sem título";
+
+      if (isUntitled) {
+        untitledList.push({
+          type: "card",
+          cardId: card.id,
+          src: card.imageDataUrl || imageCache[card.id] || null,
+          title: card.title || "",
+          sourceDesc: `Card na Galeria (${card.id})`
+        });
+        if (card.imageDataUrl) seenSrc.add(card.imageDataUrl);
+      }
+    });
+
+    // 2. Check tier lists from Supabase
+    try {
+      const { data: tls, error } = await supabase.from("tier_lists").select("id, title, tiers, bank, row_metadata");
+      if (!error && Array.isArray(tls)) {
+        tls.forEach(tl => {
+          const metaUnvoted = (tl.row_metadata || []).find(m => m && m.unvoted_bank)?.unvoted_bank || [];
+          const allItems = [...(tl.tiers || []).flatMap(t => t.items || []), ...(tl.bank || []), ...metaUnvoted];
+
+          allItems.forEach(item => {
+            if (!item || !item.src) return;
+            const t = (item.title || "").trim().toLowerCase();
+            const isUntitled = !t || t.startsWith("image.") || t.startsWith("image_") || t === "item sem título" || t === "sem titulo" || t === "sem título";
+
+            if (isUntitled) {
+              const existing = untitledList.find(u => u.src === item.src);
+              if (existing) {
+                if (!existing.tierListRefs) existing.tierListRefs = [];
+                if (!existing.tierListRefs.some(r => r.tlId === tl.id)) {
+                  existing.tierListRefs.push({ tlId: tl.id, tlTitle: tl.title, itemId: item.id });
+                }
+              } else {
+                seenSrc.add(item.src);
+                untitledList.push({
+                  type: "tier_item",
+                  src: item.src,
+                  title: item.title || "",
+                  sourceDesc: `Tier List: "${tl.title}"`,
+                  tierListRefs: [{ tlId: tl.id, tlTitle: tl.title, itemId: item.id }]
+                });
+              }
+            }
+          });
+        });
+      }
+    } catch (e) {
+      console.warn("Erro ao buscar itens de tier list sem título:", e);
+    }
+
+    return untitledList;
+  }
+
+  async function updateUntitledCountBadge() {
+    const badge = document.getElementById("untitled-curation-tab-badge");
+    if (!badge) return;
+    try {
+      const list = await fetchAllUntitledItems();
+      badge.textContent = list.length;
+      badge.style.display = list.length > 0 ? "inline-block" : "none";
+    } catch (e) {
+      badge.textContent = "0";
+    }
+  }
+
+  async function loadAndRenderUntitledCuration() {
+    if (!curationImagesGrid) return;
+    curationImagesGrid.innerHTML = `
+      <div style="grid-column: 1 / -1; text-align: center; padding: 3rem 1rem; color: var(--text-muted);">
+        <p style="font-size: 1.1rem; margin-bottom: 0.5rem;">🔍 Varrendo banco de dados e tabuleiros...</p>
+        <span style="font-size: 0.85rem;">Localizando imagens sem título ou com nomes genéricos</span>
+      </div>
+    `;
+    if (curationEmptyMsg) curationEmptyMsg.style.display = "none";
+
+    const items = await fetchAllUntitledItems();
+    cachedUntitledItems = items;
+
+    // Update tab badge
+    const badge = document.getElementById("untitled-curation-tab-badge");
+    if (badge) {
+      badge.textContent = items.length;
+      badge.style.display = items.length > 0 ? "inline-block" : "none";
+    }
+
+    curationImagesGrid.innerHTML = "";
+    if (items.length === 0) {
+      if (curationEmptyMsg) curationEmptyMsg.style.display = "block";
+      return;
+    }
+
+    items.forEach((item, index) => {
+      const cardEl = document.createElement("div");
+      cardEl.className = "curation-card";
+      cardEl.id = `curation-card-${index}`;
+
+      const imgWrap = document.createElement("div");
+      imgWrap.className = "curation-img-wrap";
+
+      const img = document.createElement("img");
+      if (item.src) {
+        img.src = item.src;
+      } else if (item.cardId) {
+        img.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'%3E%3Crect width='120' height='120' fill='%23222'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-size='24' fill='%23666'%3E🖼️%3C/text%3E%3C/svg%3E";
+        fetchCardImage(item.cardId).then(src => {
+          if (src && src !== "none") {
+            img.src = src;
+            item.src = src;
+          }
+        });
+      }
+      img.alt = "Imagem sem título";
+      imgWrap.appendChild(img);
+
+      const sourceBadge = document.createElement("span");
+      sourceBadge.className = "curation-source-badge";
+      let sourceText = item.sourceDesc;
+      if (item.tierListRefs && item.tierListRefs.length > 1) {
+        sourceText = `Presente em ${item.tierListRefs.length} Tabuleiros`;
+      }
+      sourceBadge.textContent = sourceText;
+
+      const formRow = document.createElement("div");
+      formRow.className = "curation-form-row";
+
+      const input = document.createElement("input");
+      input.type = "text";
+      input.className = "curation-title-input";
+      input.placeholder = "Digite o título (ex: Nome do Jogo)...";
+      if (item.title && !item.title.toLowerCase().startsWith("image.")) {
+        input.value = item.title;
+      }
+
+      const saveBtn = document.createElement("button");
+      saveBtn.type = "button";
+      saveBtn.className = "btn-save-curation";
+      saveBtn.textContent = "💾 Salvar Título";
+
+      const performSave = async () => {
+        const newTitle = input.value.trim();
+        if (!newTitle) {
+          input.focus();
+          input.style.borderColor = "#ff7675";
+          setTimeout(() => input.style.borderColor = "", 1500);
+          return;
+        }
+
+        saveBtn.disabled = true;
+        saveBtn.textContent = "Salvando...";
+
+        try {
+          // 1. If it's a card in cards table, update it
+          if (item.cardId) {
+            await supabase.from("cards").update({ title: newTitle }).eq("id", item.cardId);
+            const foundCard = cards.find(c => c.id === item.cardId);
+            if (foundCard) foundCard.title = newTitle;
+          }
+
+          // 2. If it belongs to tier lists, update each tier list in Supabase
+          if (Array.isArray(item.tierListRefs) && item.tierListRefs.length > 0) {
+            for (const ref of item.tierListRefs) {
+              const { data: tlData, error: tlErr } = await supabase.from("tier_lists").select("*").eq("id", ref.tlId).single();
+              if (!tlErr && tlData) {
+                const tiers = tlData.tiers || [];
+                const bank = tlData.bank || [];
+                let row_metadata = tlData.row_metadata || [];
+
+                tiers.forEach(t => {
+                  (t.items || []).forEach(i => {
+                    if (i.src === item.src || i.id === ref.itemId) {
+                      i.title = newTitle;
+                    }
+                  });
+                });
+                bank.forEach(i => {
+                  if (i.src === item.src || i.id === ref.itemId) {
+                    i.title = newTitle;
+                  }
+                });
+                row_metadata.forEach(m => {
+                  if (m && Array.isArray(m.unvoted_bank)) {
+                    m.unvoted_bank.forEach(i => {
+                      if (i.src === item.src || i.id === ref.itemId) {
+                        i.title = newTitle;
+                      }
+                    });
+                  }
+                });
+
+                await supabase.from("tier_lists").update({
+                  tiers: tiers,
+                  bank: bank,
+                  row_metadata: row_metadata,
+                  updated_at: new Date().toISOString()
+                }).eq("id", ref.tlId);
+              }
+            }
+          }
+
+          // 3. Register image in cards table so it becomes searchable and reusable across the site
+          if (!item.cardId && item.src) {
+            const newCardId = `u_lele__games_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+            await supabase.from("cards").insert([{
+              id: newCardId,
+              title: newTitle,
+              image_data_url: item.src,
+              timestamp: Date.now(),
+              votes: 0
+            }]);
+            cards.push({
+              id: newCardId,
+              title: newTitle,
+              imageDataUrl: item.src,
+              timestamp: Date.now(),
+              votes: 0
+            });
+            imageCache[newCardId] = item.src;
+          }
+
+          // Success visual feedback
+          cardEl.style.transition = "all 0.4s ease";
+          cardEl.style.borderColor = "#2ed573";
+          cardEl.style.boxShadow = "0 0 15px rgba(46, 213, 115, 0.4)";
+          saveBtn.textContent = "✓ Salvo!";
+          saveBtn.style.background = "#2ed573";
+
+          setTimeout(() => {
+            cardEl.style.opacity = "0";
+            cardEl.style.transform = "scale(0.8)";
+            setTimeout(() => {
+              cardEl.remove();
+              cachedUntitledItems = cachedUntitledItems.filter((_, i) => i !== index);
+              const remaining = curationImagesGrid.querySelectorAll(".curation-card").length;
+              if (badge) badge.textContent = remaining;
+              if (remaining === 0 && curationEmptyMsg) {
+                curationEmptyMsg.style.display = "block";
+              }
+            }, 300);
+          }, 800);
+
+        } catch (err) {
+          console.error("Erro ao salvar título curado:", err);
+          alert("Erro ao salvar: " + (err.message || err));
+          saveBtn.disabled = false;
+          saveBtn.textContent = "💾 Salvar Título";
+        }
+      };
+
+      saveBtn.addEventListener("click", performSave);
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          performSave();
+        }
+      });
+
+      formRow.appendChild(input);
+      formRow.appendChild(saveBtn);
+
+      cardEl.appendChild(imgWrap);
+      cardEl.appendChild(sourceBadge);
+      cardEl.appendChild(formRow);
+
+      curationImagesGrid.appendChild(cardEl);
+    });
+  }
+
+  if (refreshCurationBtn) {
+    refreshCurationBtn.addEventListener("click", () => {
+      loadAndRenderUntitledCuration();
     });
   }
 
