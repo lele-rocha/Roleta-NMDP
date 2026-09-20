@@ -2124,6 +2124,7 @@
 
     if (lowerOwner === "lele") {
       if (lowerSlug === "games") {
+        if (cid.startsWith("u_lele__games_")) return true;
         return !cid.startsWith("anime_") && !cid.startsWith("filmes_") && !cid.startsWith("u_");
       } else if (lowerSlug === "anime") {
         return cid.startsWith("anime_");

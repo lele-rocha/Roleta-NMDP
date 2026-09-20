@@ -129,6 +129,7 @@
 
     if (lowerOwner === "lele") {
       if (lowerSlug === "games") {
+        if (cid.startsWith("u_lele__games_")) return true;
         return !cid.startsWith("anime_") && !cid.startsWith("filmes_") && !cid.startsWith("u_");
       } else if (lowerSlug === "anime") {
         return cid.startsWith("anime_");
@@ -1191,8 +1192,10 @@
         generatedId = `anime_${generatedId}`;
       } else if (lowerSlug === "filmes") {
         generatedId = `filmes_${generatedId}`;
+      } else if (lowerSlug !== "games") {
+        generatedId = `u_${lowerOwner}__${lowerSlug}_${generatedId}`;
       }
-      // games keeps plain ID for backward compatibility
+      // games keeps plain ID or u_lele__games_ for backward compatibility
     } else {
       generatedId = `u_${lowerOwner}__${lowerSlug}_${generatedId}`;
     }
