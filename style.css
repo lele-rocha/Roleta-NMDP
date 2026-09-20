@@ -498,15 +498,24 @@ h1, h2, h3, .top-nav__brand, .btn-spin, .sidebar-tab, .btn-mode-select, .voting-
 }
 
 .btn-spin .btn-spin__icon,
+.btn-spin .btn-spin__text,
 .btn-spin span,
 .btn-spin * {
   position: relative;
   z-index: 2;
+  color: #ffffff;
+}
+
+.btn-spin .btn-spin__text {
+  color: #ffffff;
+  font-weight: 800;
+  text-shadow: 0 0 10px rgba(0, 238, 252, 0.4);
 }
 
 .btn-spin .btn-spin__icon {
   color: #00eefc;
   font-size: 1.3rem;
+  text-shadow: 0 0 12px rgba(0, 238, 252, 0.6);
 }
 
 .btn-spin:hover:not(:disabled) {
@@ -530,6 +539,10 @@ h1, h2, h3, .top-nav__brand, .btn-spin, .sidebar-tab, .btn-mode-select, .voting-
 }
 .btn-spin:disabled::before {
   display: none;
+}
+.btn-spin:disabled .btn-spin__icon,
+.btn-spin:disabled .btn-spin__text {
+  text-shadow: none;
 }
 
 .btn-spin.spinning .btn-spin__icon {
