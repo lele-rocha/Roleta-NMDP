@@ -2500,3 +2500,16 @@ select {
   opacity: 0.9;
 }
 
+.gallery-tab--curation.active {
+  color: #000 !important;
+  background: #ff9f43 !important;
+  border-color: #ff9f43 !important;
+  box-shadow: 0 4px 15px rgba(255, 159, 67, 0.45) !important;
+}
+
+.gallery-tab--curation.active span {
+  background: #000 !important;
+  color: #ff9f43 !important;
+}
+
+

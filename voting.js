@@ -108,6 +108,9 @@
   }
 
   function getActiveGallery() {
+    if (currentGallerySlug === "__curation_untitled__") {
+      return { owner: "lele", slug: "__curation_untitled__", name: "Sem Título", icon: "🏷️" };
+    }
     const all = getAllGalleries();
     const found = all.find(g => g.owner.toLowerCase() === currentGalleryOwner.toLowerCase() && g.slug.toLowerCase() === currentGallerySlug.toLowerCase());
     if (found) return found;
@@ -274,15 +277,15 @@
           </p>
         `;
       } else {
-        // Ensure currentGallerySlug belongs to this owner
-        if (!ownerGalleries.some(g => g.slug.toLowerCase() === currentGallerySlug.toLowerCase())) {
+        // Ensure currentGallerySlug belongs to this owner (skip if in curation mode)
+        if (currentGallerySlug !== "__curation_untitled__" && !ownerGalleries.some(g => g.slug.toLowerCase() === currentGallerySlug.toLowerCase())) {
           currentGallerySlug = ownerGalleries[0].slug;
         }
 
         ownerGalleries.forEach(g => {
           const btn = document.createElement("button");
           btn.type = "button";
-          const isActive = (g.slug.toLowerCase() === currentGallerySlug.toLowerCase());
+          const isActive = (currentGallerySlug !== "__curation_untitled__" && g.slug.toLowerCase() === currentGallerySlug.toLowerCase());
           btn.className = "gallery-tab" + (isActive ? " active" : "");
           btn.dataset.owner = g.owner;
           btn.dataset.slug = g.slug;
@@ -305,7 +308,8 @@
           curBtn.className = "gallery-tab gallery-tab--curation" + (isCurating ? " active" : "");
           curBtn.style.border = "1px dashed #ff9f43";
           curBtn.style.color = isCurating ? "#fff" : "#ff9f43";
-          curBtn.innerHTML = `🏷️ Sem Título <span id="untitled-curation-tab-badge" style="background:#ff9f43; color:#000; font-size:0.75rem; font-weight:800; padding: 2px 6px; border-radius: 10px; margin-left: 4px;">...</span>`;
+          const countDisplay = (cachedUntitledCount !== null) ? cachedUntitledCount : "...";
+          curBtn.innerHTML = `🏷️ Sem Título <span id="untitled-curation-tab-badge" style="background:#ff9f43; color:#000; font-size:0.75rem; font-weight:800; padding: 2px 6px; border-radius: 10px; margin-left: 4px;">${countDisplay}</span>`;
           curBtn.addEventListener("click", () => {
             currentGalleryOwner = "lele";
             currentGallerySlug = "__curation_untitled__";
@@ -554,6 +558,12 @@
     } catch (err) {
       // Handled in promise
     }
+  }
+
+  async function fetchCardImage(cardId) {
+    if (imageCache[cardId] && imageCache[cardId] !== "none") return imageCache[cardId];
+    await triggerImageFetch(cardId);
+    return imageCache[cardId] || "none";
   }
 
   function updatePlaceholderWithImage(cardId) {
@@ -1775,15 +1785,20 @@
     return untitledList;
   }
 
+  let cachedUntitledCount = null;
+
   async function updateUntitledCountBadge() {
-    const badge = document.getElementById("untitled-curation-tab-badge");
-    if (!badge) return;
     try {
       const list = await fetchAllUntitledItems();
-      badge.textContent = list.length;
-      badge.style.display = list.length > 0 ? "inline-block" : "none";
+      cachedUntitledCount = list.length;
+      const badge = document.getElementById("untitled-curation-tab-badge");
+      if (badge) {
+        badge.textContent = cachedUntitledCount;
+        badge.style.display = cachedUntitledCount > 0 ? "inline-block" : "none";
+      }
     } catch (e) {
-      badge.textContent = "0";
+      const badge = document.getElementById("untitled-curation-tab-badge");
+      if (badge) badge.textContent = "0";
     }
   }
 
@@ -1799,12 +1814,13 @@
 
     const items = await fetchAllUntitledItems();
     cachedUntitledItems = items;
+    cachedUntitledCount = items.length;
 
     // Update tab badge
     const badge = document.getElementById("untitled-curation-tab-badge");
     if (badge) {
-      badge.textContent = items.length;
-      badge.style.display = items.length > 0 ? "inline-block" : "none";
+      badge.textContent = cachedUntitledCount;
+      badge.style.display = cachedUntitledCount > 0 ? "inline-block" : "none";
     }
 
     curationImagesGrid.innerHTML = "";
