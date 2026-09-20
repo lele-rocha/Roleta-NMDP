@@ -1862,6 +1862,8 @@
 
       const formRow = document.createElement("div");
       formRow.className = "curation-form-row";
+      formRow.style.flexDirection = "column";
+      formRow.style.gap = "0.5rem";
 
       const input = document.createElement("input");
       input.type = "text";
@@ -1871,10 +1873,119 @@
         input.value = item.title;
       }
 
+      const actionsRow = document.createElement("div");
+      actionsRow.style.display = "flex";
+      actionsRow.style.gap = "0.5rem";
+      actionsRow.style.width = "100%";
+
+      const deleteBtn = document.createElement("button");
+      deleteBtn.type = "button";
+      deleteBtn.className = "btn-delete-curation";
+      deleteBtn.textContent = "🗑️ Deletar";
+      deleteBtn.title = "Deletar esta imagem permanentemente de todos os bancos de dados";
+
       const saveBtn = document.createElement("button");
       saveBtn.type = "button";
       saveBtn.className = "btn-save-curation";
+      saveBtn.style.flex = "1";
       saveBtn.textContent = "💾 Salvar Título";
+
+      actionsRow.appendChild(deleteBtn);
+      actionsRow.appendChild(saveBtn);
+
+      const performDelete = async () => {
+        const confirmDel = confirm("Deseja realmente deletar esta imagem permanentemente de todos os bancos de dados (cards e tabuleiros da tier list)?");
+        if (!confirmDel) return;
+
+        deleteBtn.disabled = true;
+        deleteBtn.textContent = "Deletando...";
+        saveBtn.disabled = true;
+
+        try {
+          // 1. Delete from cards table
+          if (item.cardId) {
+            await supabase.from("cards").delete().eq("id", item.cardId);
+            delete imageCache[item.cardId];
+            delete imageFetchPromises[item.cardId];
+            cards = cards.filter(c => c.id !== item.cardId);
+          }
+          if (item.src) {
+            const matchingCards = cards.filter(c => c.imageDataUrl && c.imageDataUrl === item.src);
+            for (const mc of matchingCards) {
+              await supabase.from("cards").delete().eq("id", mc.id);
+              delete imageCache[mc.id];
+              delete imageFetchPromises[mc.id];
+              cards = cards.filter(c => c.id !== mc.id);
+            }
+          }
+
+          // 2. Delete from tier lists where referenced
+          if (Array.isArray(item.tierListRefs) && item.tierListRefs.length > 0) {
+            for (const ref of item.tierListRefs) {
+              const { data: tlData, error: tlErr } = await supabase.from("tier_lists").select("*").eq("id", ref.tlId).single();
+              if (!tlErr && tlData) {
+                let tiers = tlData.tiers || [];
+                let bank = tlData.bank || [];
+                let row_metadata = tlData.row_metadata || [];
+
+                tiers.forEach(t => {
+                  if (Array.isArray(t.items)) {
+                    t.items = t.items.filter(i => i.src !== item.src && i.id !== ref.itemId);
+                  }
+                });
+
+                bank = bank.filter(i => i.src !== item.src && i.id !== ref.itemId);
+
+                row_metadata.forEach(m => {
+                  if (m && Array.isArray(m.unvoted_bank)) {
+                    m.unvoted_bank = m.unvoted_bank.filter(i => i.src !== item.src && i.id !== ref.itemId);
+                  }
+                });
+
+                await supabase.from("tier_lists").update({
+                  tiers: tiers,
+                  bank: bank,
+                  row_metadata: row_metadata,
+                  updated_at: new Date().toISOString()
+                }).eq("id", ref.tlId);
+              }
+            }
+          }
+
+          // Visual deletion feedback
+          cardEl.style.transition = "all 0.35s ease";
+          cardEl.style.borderColor = "#ff4757";
+          cardEl.style.boxShadow = "0 0 15px rgba(255, 71, 87, 0.4)";
+          cardEl.style.opacity = "0";
+          cardEl.style.transform = "scale(0.8)";
+
+          setTimeout(() => {
+            cardEl.remove();
+            cachedUntitledItems = cachedUntitledItems.filter((_, i) => i !== index);
+            if (cachedUntitledCount !== null) {
+              cachedUntitledCount = Math.max(0, cachedUntitledCount - 1);
+            }
+            const badge = document.getElementById("untitled-curation-tab-badge");
+            if (badge && cachedUntitledCount !== null) {
+              badge.textContent = cachedUntitledCount;
+              badge.style.display = cachedUntitledCount > 0 ? "inline-block" : "none";
+            }
+            const remaining = curationImagesGrid.querySelectorAll(".curation-card").length;
+            if (remaining === 0 && curationEmptyMsg) {
+              curationEmptyMsg.style.display = "block";
+            }
+          }, 350);
+
+        } catch (err) {
+          console.error("Erro ao deletar imagem:", err);
+          alert("Erro ao deletar imagem: " + (err.message || err));
+          deleteBtn.disabled = false;
+          deleteBtn.textContent = "🗑️ Deletar";
+          saveBtn.disabled = false;
+        }
+      };
+
+      deleteBtn.addEventListener("click", performDelete);
 
       const performSave = async () => {
         const newTitle = input.value.trim();
@@ -1970,8 +2081,15 @@
             setTimeout(() => {
               cardEl.remove();
               cachedUntitledItems = cachedUntitledItems.filter((_, i) => i !== index);
+              if (cachedUntitledCount !== null) {
+                cachedUntitledCount = Math.max(0, cachedUntitledCount - 1);
+              }
+              const badge = document.getElementById("untitled-curation-tab-badge");
+              if (badge && cachedUntitledCount !== null) {
+                badge.textContent = cachedUntitledCount;
+                badge.style.display = cachedUntitledCount > 0 ? "inline-block" : "none";
+              }
               const remaining = curationImagesGrid.querySelectorAll(".curation-card").length;
-              if (badge) badge.textContent = remaining;
               if (remaining === 0 && curationEmptyMsg) {
                 curationEmptyMsg.style.display = "block";
               }
@@ -1995,7 +2113,7 @@
       });
 
       formRow.appendChild(input);
-      formRow.appendChild(saveBtn);
+      formRow.appendChild(actionsRow);
 
       cardEl.appendChild(imgWrap);
       cardEl.appendChild(sourceBadge);

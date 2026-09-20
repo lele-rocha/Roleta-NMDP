@@ -2500,6 +2500,30 @@ select {
   opacity: 0.9;
 }
 
+.btn-delete-curation {
+  background: rgba(255, 71, 87, 0.15);
+  border: 1px solid rgba(255, 71, 87, 0.4);
+  color: #ff6b81;
+  font-weight: 700;
+  font-size: 0.8rem;
+  padding: 0.45rem 0.75rem;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.btn-delete-curation:hover:not(:disabled) {
+  background: #ff4757;
+  color: #fff;
+  border-color: #ff4757;
+}
+
+.btn-delete-curation:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .gallery-tab--curation.active {
   color: #000 !important;
   background: #ff9f43 !important;
