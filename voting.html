@@ -3,20 +3,20 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Roleta NMDP - Voting Gallery</title>
-  <link rel="stylesheet" href="style.css?v=30">
+  <title>Roleta NMDP - Galeria de Votos</title>
+  <link rel="stylesheet" href="style.css?v=31">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700;800&family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
-  <script src="page-transition.js?v=30"></script>
+  <script src="page-transition.js?v=31"></script>
 </head>
 <body>
   <div class="app">
     <nav class="top-nav">
       <div class="top-nav__brand">Roleta NMDP</div>
       <div class="top-nav__links">
-        <a href="wheel.html" class="top-nav__link">🎡 Wheel</a>
-        <a href="voting.html" class="top-nav__link active">🗳️ Voting Gallery</a>
+        <a href="wheel.html" class="top-nav__link">🎡 Roleta</a>
+        <a href="voting.html" class="top-nav__link active">🗳️ Galeria de Votos</a>
         <a href="tierlist.html" class="top-nav__link">🏆 Tier List</a>
       </div>
     </nav>
@@ -30,7 +30,7 @@
       </div>
       <div id="user-profile-status" class="user-session-profile" style="display: none;">
         <span>Usuário ativo: <strong id="active-username" class="accent-text"></strong></span>
-        <span class="user-votes-status">Votos castados (<span id="active-user-votes-category">Games</span>): <strong id="active-user-votes">0</strong>/20</span>
+        <span class="user-votes-status">Votos realizados (<span id="active-user-votes-category">Games</span>): <strong id="active-user-votes">0</strong>/20</span>
         <button type="button" id="logout-btn" class="btn-secondary-sm">Sair</button>
         <button type="button" id="clear-votes-btn" class="btn-danger-sm" title="Limpar todos os meus votos">Limpar Votos</button>
       </div>
@@ -85,7 +85,7 @@
                 <input type="file" id="card-image-input" accept="image/*" class="hidden-file-input" />
               </div>
               <div id="card-image-preview" class="card-image-preview" hidden>
-                <img id="card-preview-img" src="" alt="Preview" />
+                <img id="card-preview-img" src="" alt="Pré-visualização" />
                 <button type="button" id="remove-card-preview" class="btn-danger" style="margin-top:0.5rem;">Remover Imagem</button>
               </div>
               <div id="card-reused-notice" style="display: none; align-items: center; gap: 0.4rem; padding: 0.4rem 0.75rem; background: rgba(108, 92, 231, 0.15); border: 1px solid rgba(108, 92, 231, 0.4); border-radius: 6px; font-size: 0.8rem; color: #a29bfe; margin-top: 0.5rem;">
@@ -217,7 +217,7 @@
           <input type="file" id="edit-image-input" accept="image/*" class="hidden-file-input" />
         </div>
         <div id="edit-image-preview" class="card-image-preview" style="margin-top:0.5rem;" hidden>
-          <img id="edit-preview-img" src="" alt="Preview" />
+          <img id="edit-preview-img" src="" alt="Pré-visualização" />
           <button type="button" id="remove-edit-image-btn" class="btn-danger" style="margin-top:0.5rem;">Remover Imagem</button>
         </div>
       </div>
@@ -229,8 +229,8 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js?v=30"></script>
-  <script src="ambient-bg.js?v=30"></script>
-  <script src="voting.js?v=30"></script>
+  <script src="config.js?v=31"></script>
+  <script src="ambient-bg.js?v=31"></script>
+  <script src="voting.js?v=31"></script>
 </body>
 </html>

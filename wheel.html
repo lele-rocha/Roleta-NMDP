@@ -3,30 +3,30 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Roleta NMDP - Wheel</title>
-  <link rel="stylesheet" href="style.css?v=30">
+  <title>Roleta NMDP - Roleta</title>
+  <link rel="stylesheet" href="style.css?v=31">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700;800&family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
-  <script src="page-transition.js?v=30"></script>
+  <script src="page-transition.js?v=31"></script>
 </head>
 <body>
   <div class="app">
     <nav class="top-nav">
       <div class="top-nav__brand">Roleta NMDP</div>
       <div class="top-nav__links">
-        <a href="wheel.html" class="top-nav__link active">🎡 Wheel</a>
-        <a href="voting.html" class="top-nav__link">🗳️ Voting Gallery</a>
+        <a href="wheel.html" class="top-nav__link active">🎡 Roleta</a>
+        <a href="voting.html" class="top-nav__link">🗳️ Galeria de Votos</a>
         <a href="tierlist.html" class="top-nav__link">🏆 Tier List</a>
       </div>
     </nav>
 
     <main class="main">
       <aside class="sidebar">
-        <nav class="sidebar-tabs" role="tablist" aria-label="Sidebar">
-          <button class="sidebar-tab active" id="tab-btn-names" type="button" role="tab" aria-selected="true" aria-controls="tab-names" data-tab="names">Names List</button>
-          <button class="sidebar-tab" id="tab-btn-settings" type="button" role="tab" aria-selected="false" aria-controls="tab-settings" data-tab="settings">Settings</button>
-          <button class="sidebar-tab" id="tab-btn-audio" type="button" role="tab" aria-selected="false" aria-controls="tab-audio" data-tab="audio">Audio</button>
+        <nav class="sidebar-tabs" role="tablist" aria-label="Painel Lateral">
+          <button class="sidebar-tab active" id="tab-btn-names" type="button" role="tab" aria-selected="true" aria-controls="tab-names" data-tab="names">Lista de Nomes</button>
+          <button class="sidebar-tab" id="tab-btn-settings" type="button" role="tab" aria-selected="false" aria-controls="tab-settings" data-tab="settings">Configurações</button>
+          <button class="sidebar-tab" id="tab-btn-audio" type="button" role="tab" aria-selected="false" aria-controls="tab-audio" data-tab="audio">Áudio</button>
         </nav>
         <div class="tab-panels">
           <div class="tab-panel active" id="tab-names" role="tabpanel" aria-labelledby="tab-btn-names">
@@ -71,14 +71,14 @@
           <div class="tab-panel" id="tab-settings" role="tabpanel" aria-labelledby="tab-btn-settings" hidden>
             <div class="setting-group">
               <div class="setting-header">
-                <label for="spin-duration" class="label">Spin Duration</label>
+                <label for="spin-duration" class="label">Duração do Giro</label>
                 <span class="setting-value" id="spin-duration-value">5.0s</span>
               </div>
-              <p class="setting-desc">Control how long the wheel spins before stopping.</p>
+              <p class="setting-desc">Controle quanto tempo a roleta gira antes de parar.</p>
               <div class="slider-row">
-                <span class="slider-label">Fast</span>
+                <span class="slider-label">Rápido</span>
                 <input type="range" id="spin-duration" class="range-slider" min="1" max="30" step="0.5" value="5">
-                <span class="slider-label">Slow</span>
+                <span class="slider-label">Lento</span>
               </div>
             </div>
             <div class="setting-group" style="margin-top: 1.5rem;">
@@ -171,8 +171,8 @@
     </div>
   </div>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js?v=30"></script>
-  <script src="ambient-bg.js?v=30"></script>
-  <script src="wheel.js?v=30"></script>
+  <script src="config.js?v=31"></script>
+  <script src="ambient-bg.js?v=31"></script>
+  <script src="wheel.js?v=31"></script>
 </body>
 </html>
