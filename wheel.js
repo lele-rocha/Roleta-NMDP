@@ -1274,6 +1274,7 @@ CREATE POLICY "Allow delete" ON public.audios FOR DELETE USING (true);</pre>
       toggleCardsWheelBtn.classList.add("active");
       defaultNamesControls.style.display = "none";
       cardsNamesControls.style.display = "block";
+      populateCategorySelect();
     }
 
     updateUI();
@@ -1282,12 +1283,102 @@ CREATE POLICY "Allow delete" ON public.audios FOR DELETE USING (true);</pre>
   // Import button event listener
   importCardsBtn.addEventListener("click", importCardsFromStorage);
 
+  function cardBelongsToGallery(card, owner, slug) {
+    const cid = card.id || "";
+    const lowerOwner = (owner || "").toLowerCase();
+    const lowerSlug = (slug || "").toLowerCase();
+
+    if (lowerOwner === "lele") {
+      if (lowerSlug === "games") {
+        return !cid.startsWith("anime_") && !cid.startsWith("filmes_") && !cid.startsWith("u_");
+      } else if (lowerSlug === "anime") {
+        return cid.startsWith("anime_");
+      } else if (lowerSlug === "filmes") {
+        return cid.startsWith("filmes_");
+      }
+    }
+
+    const prefix = `u_${lowerOwner}__${lowerSlug}_`;
+    return cid.startsWith(prefix);
+  }
+
+  async function fetchCustomGalleries() {
+    if (!supabase) return [];
+    try {
+      const { data, error } = await supabase.from("users").select("name, voted_card_ids");
+      if (error) throw error;
+      const galleries = [];
+      (data || []).forEach(u => {
+        if (u.name && u.name.startsWith("__gallery_def__")) {
+          try {
+            const raw = (u.voted_card_ids || []).join("");
+            const parsed = JSON.parse(raw);
+            if (parsed && parsed.owner && parsed.slug) {
+              galleries.push(parsed);
+            }
+          } catch (e) {
+            console.warn("Erro ao fazer parse da galeria:", u.name, e);
+          }
+        }
+      });
+      return galleries;
+    } catch (e) {
+      console.error("Erro ao buscar galerias customizadas:", e);
+      return [];
+    }
+  }
+
+  async function populateCategorySelect() {
+    const categorySelect = document.getElementById("wheel-card-category-select");
+    if (!categorySelect) return;
+
+    const loggedUser = (localStorage.getItem("roleta-nmdp-session") || "lele").trim();
+    const customGalleries = await fetchCustomGalleries();
+
+    // Default base galleries
+    const defaultOptions = [
+      { value: "games", label: "🎮 Games", owner: "lele", slug: "games" },
+      { value: "anime", label: "🍿 Anime", owner: "lele", slug: "anime" },
+      { value: "filmes", label: "🎬 Filmes", owner: "lele", slug: "filmes" }
+    ];
+
+    // Filter custom galleries belonging to logged user (or lele if none logged)
+    const userCustom = customGalleries.filter(g => 
+      g.owner && g.owner.toLowerCase() === loggedUser.toLowerCase()
+    );
+
+    const prevValue = categorySelect.value;
+    categorySelect.innerHTML = "";
+
+    defaultOptions.forEach(opt => {
+      const option = document.createElement("option");
+      option.value = opt.value;
+      option.textContent = opt.label;
+      categorySelect.appendChild(option);
+    });
+
+    userCustom.forEach(g => {
+      const option = document.createElement("option");
+      option.value = `custom:${g.owner}:${g.slug}`;
+      option.textContent = `${g.icon || "📁"} ${g.name}`;
+      categorySelect.appendChild(option);
+    });
+
+    const allOption = document.createElement("option");
+    allOption.value = "all";
+    allOption.textContent = "🌐 Todos";
+    categorySelect.appendChild(allOption);
+
+    if (prevValue && Array.from(categorySelect.options).some(o => o.value === prevValue)) {
+      categorySelect.value = prevValue;
+    }
+  }
+
   async function importCardsFromStorage() {
     try {
       const { data, error } = await supabase
         .from("cards")
-        .select("id, title, votes, image_data_url")
-        .gte("votes", 1);
+        .select("id, title, votes, image_data_url");
       if (error) throw error;
 
       if (data && data.length > 0) {
@@ -1296,25 +1387,29 @@ CREATE POLICY "Allow delete" ON public.audios FOR DELETE USING (true);</pre>
 
         const filteredData = data.filter(c => {
           if (category === "anime") {
-            return c.id.startsWith("anime_");
+            return cardBelongsToGallery(c, "lele", "anime");
           } else if (category === "filmes") {
-            return c.id.startsWith("filmes_");
+            return cardBelongsToGallery(c, "lele", "filmes");
           } else if (category === "games") {
-            return !c.id.startsWith("anime_") && !c.id.startsWith("filmes_");
+            return cardBelongsToGallery(c, "lele", "games");
+          } else if (category.startsWith("custom:")) {
+            const parts = category.split(":");
+            return cardBelongsToGallery(c, parts[1], parts[2]);
           }
           return true; // "all"
         });
 
         if (filteredData.length === 0) {
-          const catName = category === "anime" ? "Anime" : category === "filmes" ? "Filmes" : category === "games" ? "Games" : "Todos";
-          alert(`Nenhum card com 1 ou mais votos encontrado para a categoria selecionada (${catName})!`);
+          const selectedOption = categorySelect?.options[categorySelect.selectedIndex];
+          const catName = selectedOption ? selectedOption.textContent : category;
+          alert(`Nenhum card encontrado para a categoria selecionada (${catName})!`);
           return;
         }
 
         cardsWheelItems = filteredData.map(c => ({
           id: c.id,
           title: c.title,
-          lives: c.votes,
+          lives: Math.max(1, c.votes || 0),
           image_data_url: c.image_data_url || null
         })).sort((a, b) => b.lives - a.lives || a.title.localeCompare(b.title));
         preloadCardImages(cardsWheelItems);
@@ -1327,7 +1422,7 @@ CREATE POLICY "Allow delete" ON public.audios FOR DELETE USING (true);</pre>
           }, 400);
         }
       } else {
-        alert("Nenhum card cadastrado com 1 ou mais votos encontrado no banco de dados!");
+        alert("Nenhum card cadastrado encontrado no banco de dados!");
       }
     } catch (e) {
       console.error(e);
@@ -1400,6 +1495,7 @@ CREATE POLICY "Allow delete" ON public.audios FOR DELETE USING (true);</pre>
   loadCardsWheelState();
   updateDurationLabel();
   updateUI();
+  populateCategorySelect();
   loadAudios();
   setupAudioRealtime();
 })();
