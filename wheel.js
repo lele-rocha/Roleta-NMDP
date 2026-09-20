@@ -670,6 +670,9 @@ CREATE POLICY "Allow delete" ON public.audios FOR DELETE USING (true);</pre>
     }
 
     if (currentItems.length === 0) {
+      if (wheelCenterEl && !centerImage) {
+        wheelCenterEl.style.display = "none";
+      }
       ctx.beginPath();
       ctx.arc(cx, cy, radius, 0, Math.PI * 2);
       ctx.fillStyle = "#242836";
@@ -684,6 +687,10 @@ CREATE POLICY "Allow delete" ON public.audios FOR DELETE USING (true);</pre>
       ctx.textBaseline = "middle";
       ctx.fillText(activeWheelMode === "default" ? "Adicione nomes" : "Importe os cards", cx, cy);
       return;
+    }
+
+    if (wheelCenterEl && !centerImage) {
+      wheelCenterEl.style.display = "";
     }
 
     const sliceAngle = (Math.PI * 2) / currentItems.length;
