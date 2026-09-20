@@ -2723,4 +2723,18 @@ select {
   color: #ff9f43 !important;
 }
 
+/* Ambient Floating Background Cards Canvas */
+.ambient-bg-canvas {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 0;
+}
 
+.app, .winner-overlay, .edit-overlay, .edit-modal-overlay, .edit-modal {
+  position: relative;
+  z-index: 1;
+}
