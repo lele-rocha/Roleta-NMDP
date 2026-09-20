@@ -728,6 +728,30 @@ CREATE POLICY "Allow delete" ON public.audios FOR DELETE USING (true);</pre>
     return truncated + "…";
   }
 
+  function fitCardTitleWithHearts(title, lives, maxWidth) {
+    const hearts = "❤️".repeat(Math.max(1, lives));
+    const suffix = " " + hearts;
+    const suffixWidth = ctx.measureText(suffix).width;
+
+    if (suffixWidth >= maxWidth) {
+      return hearts;
+    }
+
+    const availableTitleWidth = maxWidth - suffixWidth;
+    if (ctx.measureText(title).width <= availableTitleWidth) {
+      return title + suffix;
+    }
+
+    let truncated = title;
+    while (truncated.length > 1 && ctx.measureText(truncated + "…" + suffix).width > maxWidth) {
+      truncated = truncated.slice(0, -1);
+    }
+    if (ctx.measureText(truncated + "…" + suffix).width > maxWidth) {
+      return hearts;
+    }
+    return truncated + "…" + suffix;
+  }
+
   function drawWheel() {
     const size = canvas.width;
     const cx = size / 2;
@@ -740,6 +764,8 @@ CREATE POLICY "Allow delete" ON public.audios FOR DELETE USING (true);</pre>
     if (activeWheelMode === "default") {
       currentItems = names.map((n) => ({
         title: n,
+        rawTitle: n,
+        lives: 0,
         image: null,
       }));
     } else {
@@ -747,7 +773,7 @@ CREATE POLICY "Allow delete" ON public.audios FOR DELETE USING (true);</pre>
         .filter((item) => item.lives > 0)
         .map((item) => ({
           id: item.id,
-          title: `${item.title} (${item.lives})`,
+          title: item.title,
           rawTitle: item.title,
           lives: item.lives,
           image: cardImageElements.get(item.id) || null,
@@ -855,7 +881,12 @@ CREATE POLICY "Allow delete" ON public.audios FOR DELETE USING (true);</pre>
       ctx.font = `700 ${fontSize}px "Space Grotesk", sans-serif`;
 
       const maxTextWidth = radius * 0.52;
-      const displayText = fitText(name, maxTextWidth);
+      let displayText = "";
+      if (activeWheelMode === "cards" && item.lives > 0) {
+        displayText = fitCardTitleWithHearts(item.rawTitle, item.lives, maxTextWidth);
+      } else {
+        displayText = fitText(item.title, maxTextWidth);
+      }
 
       if (cardImg && cardImg.complete && cardImg.naturalWidth > 0) {
         // High-contrast translucent dark pill badge with cyan cyber border
@@ -971,8 +1002,16 @@ CREATE POLICY "Allow delete" ON public.audios FOR DELETE USING (true);</pre>
       return;
     }
 
+    // Ordena cards por vidas de forma decrescente (maior quantidade de vidas primeiro)
+    const sortedItems = [...cardsWheelItems].sort((a, b) => {
+      if (b.lives !== a.lives) {
+        return b.lives - a.lives;
+      }
+      return a.title.localeCompare(b.title);
+    });
+
     importedCardsList.innerHTML = "";
-    cardsWheelItems.forEach((item) => {
+    sortedItems.forEach((item) => {
       const el = document.createElement("div");
       el.className = "imported-card-item";
       if (item.lives === 0) {
@@ -1277,7 +1316,7 @@ CREATE POLICY "Allow delete" ON public.audios FOR DELETE USING (true);</pre>
           title: c.title,
           lives: c.votes,
           image_data_url: c.image_data_url || null
-        }));
+        })).sort((a, b) => b.lives - a.lives || a.title.localeCompare(b.title));
         preloadCardImages(cardsWheelItems);
         saveCardsWheelState();
         updateUI();
