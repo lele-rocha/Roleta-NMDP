@@ -693,6 +693,17 @@ h1, h2, h3, .top-nav__brand, .btn-spin, .sidebar-tab, .btn-mode-select, .voting-
   margin-bottom: 0.75rem;
 }
 
+.winner-image {
+  max-width: 170px;
+  max-height: 190px;
+  object-fit: contain;
+  border-radius: 8px;
+  margin: 0.5rem auto 1rem;
+  border: 2px solid #00eefc;
+  box-shadow: 0 0 25px rgba(0, 238, 252, 0.4), 0 10px 30px rgba(0, 0, 0, 0.8);
+  display: block;
+}
+
 .winner-name {
   font-size: clamp(1.75rem, 5vw, 2.5rem);
   font-weight: 800;

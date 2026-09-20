@@ -464,7 +464,23 @@ CREATE POLICY "Allow delete" ON public.audios FOR DELETE USING (true);</pre>
 
   let names = [];
   let activeWheelMode = "default"; // "default" or "cards"
-  let cardsWheelItems = []; // { id, title, lives }
+  let cardsWheelItems = []; // { id, title, lives, image_data_url }
+  const cardImageElements = new Map(); // id -> HTMLImageElement
+
+  function preloadCardImages(items) {
+    if (!items || !items.length) return;
+    items.forEach((item) => {
+      if (item && item.id && item.image_data_url && !cardImageElements.has(item.id)) {
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        img.onload = () => {
+          drawWheel();
+        };
+        img.src = item.image_data_url;
+        cardImageElements.set(item.id, img);
+      }
+    });
+  }
 
   // Confetti Animation Logic
   let confettiActive = false;
@@ -560,9 +576,18 @@ CREATE POLICY "Allow delete" ON public.audios FOR DELETE USING (true);</pre>
     }
   }
 
-  function showUltimateWinner(name) {
+  function showUltimateWinner(name, cardItem = null) {
     winnerNameEl.textContent = name;
     winnerLabelEl.textContent = "🏆 Vencedor Absoluto 🏆";
+    const winnerImgEl = document.getElementById("winner-image");
+    if (winnerImgEl) {
+      if (cardItem && cardItem.image_data_url) {
+        winnerImgEl.src = cardItem.image_data_url;
+        winnerImgEl.style.display = "block";
+      } else {
+        winnerImgEl.style.display = "none";
+      }
+    }
     confirmWinnerBtn.style.display = "none";
     closeWinnerBtn.textContent = "Celebrar!";
     winnerOverlay.hidden = false;
@@ -570,7 +595,21 @@ CREATE POLICY "Allow delete" ON public.audios FOR DELETE USING (true);</pre>
   }
 
   function saveCardsWheelState() {
-    localStorage.setItem("roleta-nmdp-cards-wheel", JSON.stringify(cardsWheelItems));
+    try {
+      localStorage.setItem("roleta-nmdp-cards-wheel", JSON.stringify(cardsWheelItems));
+    } catch (e) {
+      console.warn("Storage quota exceeded saving full cards with images, saving metadata only:", e);
+      try {
+        const light = cardsWheelItems.map(item => ({
+          id: item.id,
+          title: item.title,
+          lives: item.lives
+        }));
+        localStorage.setItem("roleta-nmdp-cards-wheel", JSON.stringify(light));
+      } catch (err) {
+        console.error("Failed to save cards wheel state:", err);
+      }
+    }
   }
 
   function loadCardsWheelState() {
@@ -578,9 +617,44 @@ CREATE POLICY "Allow delete" ON public.audios FOR DELETE USING (true);</pre>
       const raw = localStorage.getItem("roleta-nmdp-cards-wheel");
       if (raw) {
         cardsWheelItems = JSON.parse(raw);
+        preloadCardImages(cardsWheelItems);
+        syncMissingCardImages();
       }
     } catch (e) {
       cardsWheelItems = [];
+    }
+  }
+
+  async function syncMissingCardImages() {
+    if (!cardsWheelItems || !cardsWheelItems.length) return;
+    const missing = cardsWheelItems.filter(item => !item.image_data_url);
+    if (missing.length === 0) return;
+    try {
+      const missingIds = missing.map(m => m.id);
+      const { data, error } = await supabase
+        .from("cards")
+        .select("id, image_data_url")
+        .in("id", missingIds);
+      if (!error && data && data.length > 0) {
+        let updated = false;
+        data.forEach(d => {
+          if (d.image_data_url) {
+            const item = cardsWheelItems.find(c => c.id === d.id);
+            if (item) {
+              item.image_data_url = d.image_data_url;
+              updated = true;
+            }
+          }
+        });
+        if (updated) {
+          preloadCardImages(cardsWheelItems);
+          saveCardsWheelState();
+          drawWheel();
+          renderImportedCardsList();
+        }
+      }
+    } catch (e) {
+      console.warn("Could not sync missing card images:", e);
     }
   }
 
@@ -664,9 +738,20 @@ CREATE POLICY "Allow delete" ON public.audios FOR DELETE USING (true);</pre>
 
     let currentItems = [];
     if (activeWheelMode === "default") {
-      currentItems = names;
+      currentItems = names.map((n) => ({
+        title: n,
+        image: null,
+      }));
     } else {
-      currentItems = cardsWheelItems.filter(item => item.lives > 0).map(item => `${item.title} (${item.lives})`);
+      currentItems = cardsWheelItems
+        .filter((item) => item.lives > 0)
+        .map((item) => ({
+          id: item.id,
+          title: `${item.title} (${item.lives})`,
+          rawTitle: item.title,
+          lives: item.lives,
+          image: cardImageElements.get(item.id) || null,
+        }));
     }
 
     if (currentItems.length === 0) {
@@ -695,23 +780,63 @@ CREATE POLICY "Allow delete" ON public.audios FOR DELETE USING (true);</pre>
 
     const sliceAngle = (Math.PI * 2) / currentItems.length;
 
-    currentItems.forEach((name, i) => {
+    currentItems.forEach((item, i) => {
+      const name = item.title;
       const startAngle = rotation + i * sliceAngle;
       const endAngle = startAngle + sliceAngle;
+      const midAngle = startAngle + sliceAngle / 2;
       const color = getSliceColor(i, currentItems.length);
 
+      // Clip to this slice
+      ctx.save();
       ctx.beginPath();
       ctx.moveTo(cx, cy);
       ctx.arc(cx, cy, radius, startAngle, endAngle);
       ctx.closePath();
       ctx.fillStyle = color;
       ctx.fill();
+      ctx.clip();
 
-      ctx.strokeStyle = "rgba(255, 255, 255, 0.15)";
+      const cardImg = item.image;
+      if (cardImg && cardImg.complete && cardImg.naturalWidth > 0) {
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(midAngle + Math.PI / 2);
+
+        // Scale image to fill the sector
+        const targetLen = radius * 1.05;
+        const targetWidth = radius * Math.sin(sliceAngle / 2) * 2.6;
+        const scale = Math.max(targetLen / cardImg.naturalHeight, targetWidth / cardImg.naturalWidth);
+        const dw = cardImg.naturalWidth * scale;
+        const dh = cardImg.naturalHeight * scale;
+
+        // Position with top towards rim
+        const dx = -dw / 2;
+        const dy = -radius * 0.55 - dh / 2;
+        ctx.drawImage(cardImg, dx, dy, dw, dh);
+        ctx.restore();
+
+        // Dark gradient scrim overlay so the slice remains atmospheric and text pops
+        ctx.fillStyle = "rgba(11, 13, 19, 0.42)";
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.arc(cx, cy, radius, startAngle, endAngle);
+        ctx.closePath();
+        ctx.fill();
+      }
+
+      ctx.restore(); // end clip
+
+      // Border between slices
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.arc(cx, cy, radius, startAngle, endAngle);
+      ctx.closePath();
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.16)";
       ctx.lineWidth = 1.5;
       ctx.stroke();
 
-      const midAngle = startAngle + sliceAngle / 2;
+      // Render text
       const normAngle = normalizeAngle(midAngle);
       const isBottomHalf = normAngle > 0 && normAngle < Math.PI;
 
@@ -726,14 +851,47 @@ CREATE POLICY "Allow delete" ON public.audios FOR DELETE USING (true);</pre>
         ctx.rotate(Math.PI);
       }
 
-      const fontSize = Math.max(11, Math.min(16, 220 / currentItems.length));
+      const fontSize = Math.max(9, Math.min(15, 220 / currentItems.length));
       ctx.font = `700 ${fontSize}px "Space Grotesk", sans-serif`;
-      ctx.fillStyle = getContrastColor(color);
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
 
-      const maxTextWidth = radius * 0.55;
-      ctx.fillText(fitText(name, maxTextWidth), 0, 0);
+      const maxTextWidth = radius * 0.52;
+      const displayText = fitText(name, maxTextWidth);
+
+      if (cardImg && cardImg.complete && cardImg.naturalWidth > 0) {
+        // High-contrast translucent dark pill badge with cyan cyber border
+        const metrics = ctx.measureText(displayText);
+        const textWidth = metrics.width;
+        const padX = Math.max(5, fontSize * 0.45);
+        const padY = Math.max(2, fontSize * 0.22);
+        const pillW = textWidth + padX * 2;
+        const pillH = fontSize + padY * 2;
+
+        ctx.fillStyle = "rgba(11, 13, 19, 0.85)";
+        ctx.beginPath();
+        if (ctx.roundRect) {
+          ctx.roundRect(-pillW / 2, -pillH / 2, pillW, pillH, 4);
+        } else {
+          ctx.rect(-pillW / 2, -pillH / 2, pillW, pillH);
+        }
+        ctx.fill();
+
+        ctx.strokeStyle = "rgba(0, 238, 252, 0.65)";
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        ctx.fillStyle = "#ffffff";
+        ctx.shadowColor = "rgba(0, 0, 0, 0.95)";
+        ctx.shadowBlur = 4;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(displayText, 0, 0);
+      } else {
+        ctx.fillStyle = getContrastColor(color);
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(displayText, 0, 0);
+      }
+
       ctx.restore();
 
       if (i === winningIndex && !isSpinning) {
@@ -821,7 +979,10 @@ CREATE POLICY "Allow delete" ON public.audios FOR DELETE USING (true);</pre>
         el.classList.add("eliminated");
       }
       el.innerHTML = `
-        <span class="imported-card-title">${escapeHtml(item.title)}</span>
+        <div style="display:flex;align-items:center;gap:0.6rem;min-width:0;flex:1;">
+          ${item.image_data_url ? `<img src="${item.image_data_url}" style="width:28px;height:28px;border-radius:4px;object-fit:cover;flex-shrink:0;border:1px solid rgba(255,255,255,0.15);" alt="">` : ""}
+          <span class="imported-card-title">${escapeHtml(item.title)}</span>
+        </div>
         <span class="imported-card-lives">${item.lives > 0 ? `❤️ ${item.lives}` : "💀 Eliminado"}</span>
       `;
       importedCardsList.appendChild(el);
@@ -877,8 +1038,17 @@ CREATE POLICY "Allow delete" ON public.audios FOR DELETE USING (true);</pre>
     drawWheel();
   }
 
-  function showWinner(name) {
+  function showWinner(name, cardItem = null) {
     winnerNameEl.textContent = name;
+    const winnerImgEl = document.getElementById("winner-image");
+    if (winnerImgEl) {
+      if (cardItem && cardItem.image_data_url) {
+        winnerImgEl.src = cardItem.image_data_url;
+        winnerImgEl.style.display = "block";
+      } else {
+        winnerImgEl.style.display = "none";
+      }
+    }
     
     let totalItems = 0;
     if (activeWheelMode === "default") {
@@ -904,6 +1074,8 @@ CREATE POLICY "Allow delete" ON public.audios FOR DELETE USING (true);</pre>
 
   function hideWinner() {
     winnerOverlay.hidden = true;
+    const winnerImgEl = document.getElementById("winner-image");
+    if (winnerImgEl) winnerImgEl.style.display = "none";
     stopConfetti();
   }
 
@@ -923,16 +1095,18 @@ CREATE POLICY "Allow delete" ON public.audios FOR DELETE USING (true);</pre>
     updateUI();
 
     let winner = "";
+    let winningCardItem = null;
     if (activeWheelMode === "default") {
       winner = names[winningIndex];
     } else {
       const activeItems = cardsWheelItems.filter(item => item.lives > 0);
-      winner = activeItems[winningIndex] ? activeItems[winningIndex].title : "";
+      winningCardItem = activeItems[winningIndex] || null;
+      winner = winningCardItem ? winningCardItem.title : "";
     }
 
     playWinnerSound();
     if (winner) {
-      setTimeout(() => showWinner(winner), 400);
+      setTimeout(() => showWinner(winner, winningCardItem), 400);
     }
   }
 
@@ -1009,7 +1183,7 @@ CREATE POLICY "Allow delete" ON public.audios FOR DELETE USING (true);</pre>
           const remainingActive = cardsWheelItems.filter(item => item.lives > 0);
           if (remainingActive.length === 1) {
             setTimeout(() => {
-              showUltimateWinner(remainingActive[0].title);
+              showUltimateWinner(remainingActive[0].title, remainingActive[0]);
             }, 500);
             return;
           }
@@ -1073,7 +1247,7 @@ CREATE POLICY "Allow delete" ON public.audios FOR DELETE USING (true);</pre>
     try {
       const { data, error } = await supabase
         .from("cards")
-        .select("id, title, votes")
+        .select("id, title, votes, image_data_url")
         .gte("votes", 1);
       if (error) throw error;
 
@@ -1101,14 +1275,16 @@ CREATE POLICY "Allow delete" ON public.audios FOR DELETE USING (true);</pre>
         cardsWheelItems = filteredData.map(c => ({
           id: c.id,
           title: c.title,
-          lives: c.votes
+          lives: c.votes,
+          image_data_url: c.image_data_url || null
         }));
+        preloadCardImages(cardsWheelItems);
         saveCardsWheelState();
         updateUI();
 
         if (cardsWheelItems.length === 1) {
           setTimeout(() => {
-            showUltimateWinner(cardsWheelItems[0].title);
+            showUltimateWinner(cardsWheelItems[0].title, cardsWheelItems[0]);
           }, 400);
         }
       } else {
