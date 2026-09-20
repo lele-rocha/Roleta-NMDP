@@ -1191,6 +1191,8 @@
         generatedId = `anime_${generatedId}`;
       } else if (lowerSlug === "filmes") {
         generatedId = `filmes_${generatedId}`;
+      } else if (lowerSlug !== "games") {
+        generatedId = `u_${lowerOwner}__${lowerSlug}_${generatedId}`;
       }
       // games keeps plain ID for backward compatibility
     } else {
