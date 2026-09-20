@@ -679,7 +679,7 @@ CREATE POLICY "Allow delete" ON public.audios FOR DELETE USING (true);</pre>
       ctx.stroke();
 
       ctx.fillStyle = "#9aa3b8";
-      ctx.font = "600 18px Outfit, sans-serif";
+      ctx.font = '700 18px "Space Grotesk", sans-serif';
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.fillText(activeWheelMode === "default" ? "Adicione nomes" : "Importe os cards", cx, cy);
@@ -720,7 +720,7 @@ CREATE POLICY "Allow delete" ON public.audios FOR DELETE USING (true);</pre>
       }
 
       const fontSize = Math.max(11, Math.min(16, 220 / currentItems.length));
-      ctx.font = `600 ${fontSize}px Outfit, sans-serif`;
+      ctx.font = `700 ${fontSize}px "Space Grotesk", sans-serif`;
       ctx.fillStyle = getContrastColor(color);
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
