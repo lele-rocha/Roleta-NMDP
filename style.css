@@ -32,6 +32,10 @@
   --shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
 }
 
+html, body {
+  overflow-x: hidden;
+}
+
 body {
   min-height: 100vh;
   font-family: "Inter", system-ui, -apple-system, sans-serif;
@@ -2751,3 +2755,153 @@ select {
   position: relative;
   z-index: 1;
 }
+
+/* ============================
+   Modern Page Transitions
+   ============================ */
+
+/* View Transitions API (Chromium 126+) */
+@view-transition {
+  navigation: auto;
+}
+
+/* Top glowing neon laser bar */
+#page-transition-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 3px;
+  width: 0%;
+  background: linear-gradient(90deg, #9d4edd 0%, #00eefc 50%, #e0b6ff 100%);
+  box-shadow: 0 0 10px rgba(0, 238, 252, 0.9), 0 0 20px rgba(157, 78, 221, 0.8);
+  z-index: 99999;
+  pointer-events: none;
+  transition: width 0.22s cubic-bezier(0.1, 0.8, 0.2, 1), opacity 0.2s ease;
+}
+
+#page-transition-bar.completing {
+  width: 100% !important;
+  opacity: 0 !important;
+  transition: width 0.12s ease-out, opacity 0.18s ease-out 0.08s !important;
+}
+
+/* Nav Link feedback during transition */
+.top-nav__link.transitioning-target {
+  color: #fff !important;
+  background: rgba(0, 238, 252, 0.2) !important;
+  border-color: #00eefc !important;
+  box-shadow: 0 0 18px rgba(0, 238, 252, 0.6), inset 0 0 10px rgba(0, 238, 252, 0.3) !important;
+  transform: translateY(-1px) scale(1.03);
+  transition: all 0.15s ease !important;
+}
+
+/* Nav indicator glow pulse when clicking currently active tab */
+@keyframes navTabJiggle {
+  0% { transform: scale(1); }
+  35% { transform: scale(1.06); box-shadow: 0 0 25px rgba(157, 78, 221, 0.9), inset 0 0 10px rgba(0, 238, 252, 0.5); }
+  70% { transform: scale(0.97); }
+  100% { transform: scale(1); }
+}
+
+.top-nav__link.active-pulse {
+  animation: navTabJiggle 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+/* Subtle border glow sweep on top nav during transition */
+html.page-is-transitioning .top-nav::after {
+  background: linear-gradient(90deg, transparent, #00eefc, #9d4edd, #00eefc, transparent);
+  box-shadow: 0 0 14px rgba(0, 238, 252, 0.8);
+  animation: navGlowSweep 0.5s ease-in-out infinite alternate;
+}
+
+@keyframes navGlowSweep {
+  0% { filter: brightness(1.1) drop-shadow(0 0 4px #9d4edd); }
+  100% { filter: brightness(1.6) drop-shadow(0 0 10px #00eefc); }
+}
+
+/* Page Exiting Animations */
+html.page-exiting-to-left .app > *:not(.top-nav) {
+  opacity: 0 !important;
+  transform: translateX(-18px) scale(0.99) !important;
+  filter: blur(4px) !important;
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+              opacity 0.18s cubic-bezier(0.4, 0, 0.2, 1),
+              filter 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  pointer-events: none;
+}
+
+html.page-exiting-to-right .app > *:not(.top-nav) {
+  opacity: 0 !important;
+  transform: translateX(18px) scale(0.99) !important;
+  filter: blur(4px) !important;
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+              opacity 0.18s cubic-bezier(0.4, 0, 0.2, 1),
+              filter 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  pointer-events: none;
+}
+
+/* Page Entering Keyframes */
+@keyframes modernSlideInFromRight {
+  0% {
+    opacity: 0;
+    transform: translateX(20px) scale(0.99);
+    filter: blur(4px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes modernSlideInFromLeft {
+  0% {
+    opacity: 0;
+    transform: translateX(-20px) scale(0.99);
+    filter: blur(4px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes modernFadeInDefault {
+  0% {
+    opacity: 0;
+    transform: translateY(12px) scale(0.995);
+    filter: blur(3px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+html.page-entering-from-right .app > *:not(.top-nav) {
+  animation: modernSlideInFromRight 0.26s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+html.page-entering-from-left .app > *:not(.top-nav) {
+  animation: modernSlideInFromLeft 0.26s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+html.page-entering-default .app > *:not(.top-nav) {
+  animation: modernFadeInDefault 0.26s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.page-exiting-to-left .app > *:not(.top-nav),
+  html.page-exiting-to-right .app > *:not(.top-nav),
+  html.page-entering-from-right .app > *:not(.top-nav),
+  html.page-entering-from-left .app > *:not(.top-nav),
+  html.page-entering-default .app > *:not(.top-nav) {
+    animation: none !important;
+    transform: none !important;
+    filter: none !important;
+    transition: opacity 0.1s ease !important;
+  }
+}
+
