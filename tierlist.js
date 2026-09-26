@@ -653,10 +653,173 @@
     }, 2500);
   }
 
+  let isSavingLocal = false;
+  let realtimeChannel = null;
+  let pollingInterval = null;
+
+  async function mergeRemoteRatings() {
+    if (!supabase || !activeBoardId) return false;
+    try {
+      const { data: remoteData, error } = await supabase
+        .from("tier_lists")
+        .select("row_metadata")
+        .eq("id", activeBoardId)
+        .single();
+
+      if (!error && remoteData && Array.isArray(remoteData.row_metadata)) {
+        const remoteRatingsObj = remoteData.row_metadata.find(m => m && m.ratings !== undefined);
+        if (remoteRatingsObj && remoteRatingsObj.ratings) {
+          let hasMergedNew = false;
+          for (const [itemId, rList] of Object.entries(remoteRatingsObj.ratings)) {
+            if (!Array.isArray(rList)) continue;
+            if (!activeBoardRatings[itemId]) {
+              activeBoardRatings[itemId] = JSON.parse(JSON.stringify(rList));
+              hasMergedNew = true;
+            } else {
+              rList.forEach(remR => {
+                const remUser = (remR.userName || "").toLowerCase();
+                const localIdx = activeBoardRatings[itemId].findIndex(locR => (locR.userName || "").toLowerCase() === remUser);
+                if (localIdx === -1) {
+                  activeBoardRatings[itemId].push(remR);
+                  hasMergedNew = true;
+                }
+              });
+            }
+          }
+          return hasMergedNew;
+        }
+      }
+    } catch (e) {
+      console.warn("Aviso ao tentar mesclar notas remotas:", e);
+    }
+    return false;
+  }
+
+  function handleRemoteBoardUpdate(remoteRow, isPolling = false) {
+    if (!remoteRow || !remoteRow.row_metadata || isSavingLocal) return;
+    const metaArray = Array.isArray(remoteRow.row_metadata) ? remoteRow.row_metadata : [];
+    const metaRatingsObj = metaArray.find(m => m && m.ratings !== undefined);
+    const remoteRatings = (metaRatingsObj && metaRatingsObj.ratings) ? metaRatingsObj.ratings : {};
+
+    let hasChanges = false;
+    const newVoters = new Set();
+    const currentUser = (loadSessionUser() || "").toLowerCase();
+
+    for (const [itemId, rList] of Object.entries(remoteRatings)) {
+      if (!Array.isArray(rList)) continue;
+      if (!activeBoardRatings[itemId]) {
+        activeBoardRatings[itemId] = [];
+      }
+      rList.forEach(r => {
+        const uName = (r.userName || "").trim();
+        const uLower = uName.toLowerCase();
+        if (uLower === currentUser && isSavingLocal) return;
+
+        const localIdx = activeBoardRatings[itemId].findIndex(loc => (loc.userName || "").toLowerCase() === uLower);
+        if (localIdx === -1) {
+          activeBoardRatings[itemId].push(r);
+          hasChanges = true;
+          if (uLower !== currentUser && uName) newVoters.add(uName);
+        } else {
+          const locScore = activeBoardRatings[itemId][localIdx].score;
+          if (locScore !== r.score || JSON.stringify(activeBoardRatings[itemId][localIdx].paramScores) !== JSON.stringify(r.paramScores)) {
+            activeBoardRatings[itemId][localIdx] = r;
+            hasChanges = true;
+            if (uLower !== currentUser && uName) newVoters.add(uName);
+          }
+        }
+      });
+    }
+
+    // Check if parameters changed remotely
+    const metaParamObj = metaArray.find(m => m && m.parameters !== undefined);
+    if (metaParamObj && Array.isArray(metaParamObj.parameters)) {
+      if (JSON.stringify(activeBoardParameters) !== JSON.stringify(metaParamObj.parameters)) {
+        activeBoardParameters = JSON.parse(JSON.stringify(metaParamObj.parameters));
+        renderSetupParams();
+      }
+    }
+
+    if (hasChanges) {
+      applyFeaturedAutoSorting();
+      renderBoard();
+      renderBank();
+      renderUnvotedBank();
+      saveBoardState();
+
+      if (newVoters.size > 0) {
+        const names = Array.from(newVoters).join(", ");
+        showAutoSaveToast(`🔔 Nova avaliação recebida de: ${names}!`);
+      }
+    }
+  }
+
+  function teardownBoardRealtime() {
+    if (realtimeChannel && supabase) {
+      try {
+        supabase.removeChannel(realtimeChannel);
+      } catch (e) {}
+      realtimeChannel = null;
+    }
+    if (pollingInterval) {
+      clearInterval(pollingInterval);
+      pollingInterval = null;
+    }
+  }
+
+  function setupBoardRealtime() {
+    teardownBoardRealtime();
+    if (!supabase || !activeBoardId || !activeEditing) return;
+
+    try {
+      realtimeChannel = supabase
+        .channel(`tier_list_${activeBoardId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "tier_lists",
+            filter: `id=eq.${activeBoardId}`
+          },
+          (payload) => {
+            if (payload && payload.new) {
+              handleRemoteBoardUpdate(payload.new);
+            }
+          }
+        )
+        .subscribe();
+    } catch (err) {
+      console.warn("Erro ao registrar Realtime da Tier List:", err);
+    }
+
+    // Smart polling fallback every 10 seconds
+    pollingInterval = setInterval(async () => {
+      if (!activeEditing || !activeBoardId || !supabase || isSavingLocal) return;
+      try {
+        const { data: latest, error } = await supabase
+          .from("tier_lists")
+          .select("row_metadata, updated_at")
+          .eq("id", activeBoardId)
+          .single();
+        if (!error && latest) {
+          handleRemoteBoardUpdate(latest, true);
+        }
+      } catch (e) {
+        // silent
+      }
+    }, 10000);
+  }
+
   async function autoSaveActiveBoard() {
     if (!supabase || !activeBoardId) return;
 
     try {
+      isSavingLocal = true;
+
+      // Always merge remote ratings first to avoid overwriting other users' votes!
+      await mergeRemoteRatings();
+
       const row_metadata = [];
       tiersData.forEach(tier => {
         row_metadata.push({
@@ -708,6 +871,10 @@
       }
     } catch (err) {
       console.warn("Erro ao auto-salvar tabuleiro:", err);
+    } finally {
+      setTimeout(() => {
+        isSavingLocal = false;
+      }, 1500);
     }
   }
 
@@ -737,6 +904,9 @@
       localStorage.setItem(SESSION_STORAGE_KEY, sessionUser);
       updateUserSessionUI();
     }
+
+    // Always merge remote ratings first before computing averages and placing cards
+    await mergeRemoteRatings();
 
     const recordId = `rate-${activeBoardId}-${itemId}-${sessionUser.toLowerCase().replace(/\s+/g, '_')}`;
 
@@ -2674,6 +2844,9 @@
         }
       }
 
+      // Merge remote ratings first so manual saves also preserve all other users' ratings
+      await mergeRemoteRatings();
+
       // Preserve featured status, ratings, parameters, and unvotedBank inside row_metadata array
       if (activeBoardIsFeatured) {
         row_metadata.push({
@@ -3161,6 +3334,7 @@
             editScreen.style.display = "flex";
 
             updateBoardPermissionsUI();
+            setupBoardRealtime();
           } catch (err) {
             console.error("Erro ao carregar detalhes:", err);
             const errMsg = err.message || err.details || (typeof err === "object" ? JSON.stringify(err) : err);
@@ -3262,6 +3436,8 @@ CREATE POLICY "Allow delete" ON public.tier_lists FOR DELETE USING (true);</pre>
         .eq("id", activeBoardId);
 
       if (error) throw error;
+
+      teardownBoardRealtime();
 
       // Reset editor session
       activeBoardId = null;
@@ -3686,12 +3862,15 @@ CREATE POLICY "Allow delete" ON public.tier_lists FOR DELETE USING (true);</pre>
     // Toggle views
     landingWrapper.style.display = "none";
     editScreen.style.display = "flex";
+    setupBoardRealtime();
   });
 
   goBackSetupBtn.addEventListener("click", () => {
     try {
       const confirmNew = confirm("Deseja voltar ao menu? Lembre-se de salvar suas alterações!");
       if (!confirmNew) return;
+
+      teardownBoardRealtime();
 
       activeEditing = false;
       activeBoardId = null;
@@ -3769,6 +3948,7 @@ CREATE POLICY "Allow delete" ON public.tier_lists FOR DELETE USING (true);</pre>
       renderBoard();
       renderBank();
       renderUnvotedBank();
+      setupBoardRealtime();
       
       if (activeBoardId) {
         deleteBoardBtn.style.display = "inline-block";
