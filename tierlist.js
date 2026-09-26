@@ -219,7 +219,12 @@
 
   function canUserEditActiveBoard() {
     const sessionUser = loadSessionUser().toLowerCase();
-    return sessionUser === "lele";
+    if (!sessionUser) return false;
+    if (sessionUser === "lele") return true;
+    if (activeBoardIsFeatured) return false;
+    const creator = (activeBoardCreatedBy || "").trim().toLowerCase();
+    if (!creator || creator === "anônimo" || creator === sessionUser) return true;
+    return false;
   }
 
   function updateBoardPermissionsUI() {
@@ -3452,6 +3457,13 @@ CREATE POLICY "Allow delete" ON public.tier_lists FOR DELETE USING (true);</pre>
       input.style.fontSize = "0.85rem";
       input.value = param;
 
+      input.addEventListener("input", () => {
+        const clean = input.value.trim();
+        if (clean) {
+          editingModalParameters[index] = clean;
+        }
+      });
+
       input.addEventListener("change", () => {
         const clean = input.value.trim();
         if (clean) {
@@ -3479,13 +3491,32 @@ CREATE POLICY "Allow delete" ON public.tier_lists FOR DELETE USING (true);</pre>
     });
   }
 
+  function closeParametersModal() {
+    if (parametersOverlay) {
+      parametersOverlay.hidden = true;
+      parametersOverlay.style.display = "none";
+    }
+  }
+
+  function openParametersModal() {
+    if (!canUserEditActiveBoard()) {
+      alert("Apenas o usuário 'lele' (ou criador do tabuleiro) pode editar os parâmetros.");
+      return;
+    }
+    editingModalParameters = Array.isArray(activeBoardParameters) ? [...activeBoardParameters] : [];
+    renderModalParameters();
+    if (parametersOverlay) {
+      parametersOverlay.hidden = false;
+      parametersOverlay.style.display = "flex";
+      if (modalParamInput) {
+        modalParamInput.value = "";
+        setTimeout(() => modalParamInput.focus(), 80);
+      }
+    }
+  }
+
   if (editParametersBtn) {
-    editParametersBtn.addEventListener("click", () => {
-      if (!canUserEditActiveBoard()) return;
-      editingModalParameters = [...activeBoardParameters];
-      renderModalParameters();
-      if (parametersOverlay) parametersOverlay.hidden = false;
-    });
+    editParametersBtn.addEventListener("click", openParametersModal);
   }
 
   if (modalAddParamBtn && modalParamInput) {
@@ -3511,13 +3542,27 @@ CREATE POLICY "Allow delete" ON public.tier_lists FOR DELETE USING (true);</pre>
   }
 
   if (cancelParametersBtn) {
-    cancelParametersBtn.addEventListener("click", () => {
-      if (parametersOverlay) parametersOverlay.hidden = true;
+    cancelParametersBtn.addEventListener("click", closeParametersModal);
+  }
+
+  if (parametersOverlay) {
+    parametersOverlay.addEventListener("click", (e) => {
+      if (e.target === parametersOverlay) {
+        closeParametersModal();
+      }
     });
   }
 
   if (saveParametersBtn) {
     saveParametersBtn.addEventListener("click", async () => {
+      if (modalParamInput) {
+        const clean = modalParamInput.value.trim();
+        if (clean && !editingModalParameters.some(p => p.toLowerCase() === clean.toLowerCase())) {
+          editingModalParameters.push(clean);
+          modalParamInput.value = "";
+        }
+      }
+
       activeBoardParameters = [...editingModalParameters];
       saveBoardState();
 
@@ -3525,7 +3570,7 @@ CREATE POLICY "Allow delete" ON public.tier_lists FOR DELETE USING (true);</pre>
         await autoSaveActiveBoard();
       }
 
-      if (parametersOverlay) parametersOverlay.hidden = true;
+      closeParametersModal();
       showAutoSaveToast("⚙️ Parâmetros atualizados!");
     });
   }

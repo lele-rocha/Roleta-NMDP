@@ -2751,9 +2751,33 @@ select {
   z-index: 0;
 }
 
-.app, .winner-overlay, .edit-overlay, .edit-modal-overlay, .edit-modal {
+.app {
   position: relative;
   z-index: 1;
+}
+
+.winner-overlay,
+.edit-overlay {
+  position: fixed !important;
+  inset: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background: rgba(10, 12, 18, 0.8) !important;
+  backdrop-filter: blur(8px) !important;
+  -webkit-backdrop-filter: blur(8px) !important;
+  z-index: 99999 !important;
+}
+
+.winner-overlay[hidden],
+.edit-overlay[hidden] {
+  display: none !important;
+}
+
+.winner-card,
+.edit-modal {
+  position: relative !important;
+  z-index: 100000 !important;
 }
 
 /* ============================
