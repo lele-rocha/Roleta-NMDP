@@ -3271,3 +3271,72 @@ html.page-entering-default .app > *:not(.top-nav) {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.bank-tile__actions {
+  display: flex;
+  gap: 0.35rem;
+  margin-top: 0.15rem;
+}
+
+.bank-tile__btn {
+  flex: 1;
+  background: var(--surface-elevated);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0.3rem 0.25rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 0.2s, background 0.2s, color 0.2s;
+}
+
+.bank-tile__btn:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.bank-tile__btn--danger:hover:not(:disabled) {
+  border-color: #ff4757;
+  color: #ff7675;
+  background: rgba(255, 71, 87, 0.1);
+}
+
+.bank-tile__btn--ok {
+  background: rgba(46, 213, 115, 0.15);
+  border-color: rgba(46, 213, 115, 0.5);
+  flex: 0 0 auto;
+  padding: 0.3rem 0.5rem;
+}
+
+.bank-tile__btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.bank-tile__edit {
+  display: flex;
+  gap: 0.3rem;
+  align-items: center;
+}
+
+.bank-tile__edit .bank-tile__btn {
+  flex: 0 0 auto;
+  padding: 0.3rem 0.45rem;
+}
+
+.bank-tile__input {
+  flex: 1;
+  min-width: 0;
+  background: #090b10;
+  border: 1px solid var(--border-purple);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 0.75rem;
+  padding: 0.3rem 0.4rem;
+  outline: none;
+}
+
+.bank-tile__input:focus {
+  border-color: var(--accent);
+}

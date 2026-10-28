@@ -1847,9 +1847,133 @@
       sourceEl.className = "bank-tile__source";
       sourceEl.textContent = bankTileSourceText(item);
 
+      const actionsEl = document.createElement("div");
+      actionsEl.className = "bank-tile__actions";
+
+      const editBtn = document.createElement("button");
+      editBtn.type = "button";
+      editBtn.className = "bank-tile__btn";
+      editBtn.textContent = "✏️ Editar";
+      editBtn.title = "Editar o nome desta imagem";
+
+      const deleteBtn = document.createElement("button");
+      deleteBtn.type = "button";
+      deleteBtn.className = "bank-tile__btn bank-tile__btn--danger";
+      deleteBtn.textContent = "🗑️ Deletar";
+      deleteBtn.title = "Deletar esta imagem de todos os bancos de dados";
+
+      actionsEl.appendChild(editBtn);
+      actionsEl.appendChild(deleteBtn);
+
+      editBtn.addEventListener("click", () => {
+        // Troca o título por um campo de edição na própria miniatura
+        const form = document.createElement("div");
+        form.className = "bank-tile__edit";
+        const input = document.createElement("input");
+        input.type = "text";
+        input.className = "bank-tile__input";
+        input.value = untitled ? "" : item.title;
+        input.placeholder = "Novo nome...";
+        const okBtn = document.createElement("button");
+        okBtn.type = "button";
+        okBtn.className = "bank-tile__btn bank-tile__btn--ok";
+        okBtn.textContent = "✓";
+        okBtn.title = "Salvar nome";
+        const cancelBtn = document.createElement("button");
+        cancelBtn.type = "button";
+        cancelBtn.className = "bank-tile__btn";
+        cancelBtn.textContent = "✕";
+        cancelBtn.title = "Cancelar";
+        form.appendChild(input);
+        form.appendChild(okBtn);
+        form.appendChild(cancelBtn);
+
+        titleEl.style.display = "none";
+        actionsEl.style.display = "none";
+        tile.insertBefore(form, sourceEl);
+        input.focus();
+        input.select();
+
+        const closeForm = () => {
+          form.remove();
+          titleEl.style.display = "";
+          actionsEl.style.display = "";
+        };
+
+        let saving = false;
+        const save = async () => {
+          if (saving) return;
+          const newTitle = input.value.trim();
+          if (!newTitle) {
+            input.focus();
+            input.style.borderColor = "#ff7675";
+            setTimeout(() => { input.style.borderColor = ""; }, 1500);
+            return;
+          }
+          if (newTitle === item.title) {
+            closeForm();
+            return;
+          }
+          saving = true;
+          okBtn.disabled = true;
+          okBtn.textContent = "…";
+          try {
+            await renameBankItem(item, newTitle);
+            refreshBankViews();
+          } catch (err) {
+            console.error("Erro ao renomear imagem:", err);
+            alert("Erro ao salvar o nome: " + (err.message || err));
+            saving = false;
+            okBtn.disabled = false;
+            okBtn.textContent = "✓";
+          }
+        };
+
+        okBtn.addEventListener("click", save);
+        cancelBtn.addEventListener("click", closeForm);
+        input.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            save();
+          } else if (e.key === "Escape") {
+            e.stopPropagation();
+            closeForm();
+          }
+        });
+      });
+
+      deleteBtn.addEventListener("click", async () => {
+        const label = untitled ? "esta imagem" : `"${item.title}"`;
+        const places = [];
+        if (item.cardId) places.push("a galeria de cards");
+        if (item.tierListRefs && item.tierListRefs.length > 0) {
+          places.push(`${item.tierListRefs.length} ${item.tierListRefs.length === 1 ? "tabuleiro" : "tabuleiros"} da Tier List`);
+        }
+        const where = places.length ? ` (${places.join(" e ")})` : "";
+        if (!confirm(`Deseja realmente deletar ${label} permanentemente de todos os bancos de dados${where}? Esta ação não pode ser desfeita.`)) return;
+
+        deleteBtn.disabled = true;
+        editBtn.disabled = true;
+        deleteBtn.textContent = "Deletando...";
+        try {
+          await deleteBankItem(item);
+          tile.style.transition = "all 0.3s ease";
+          tile.style.opacity = "0";
+          tile.style.transform = "scale(0.85)";
+          setTimeout(refreshBankViews, 300);
+        } catch (err) {
+          console.error("Erro ao deletar imagem:", err);
+          alert("Erro ao deletar imagem: " + (err.message || err));
+          deleteBtn.disabled = false;
+          editBtn.disabled = false;
+          deleteBtn.textContent = "🗑️ Deletar";
+        }
+      });
+
       tile.appendChild(imgWrap);
       tile.appendChild(titleEl);
       tile.appendChild(sourceEl);
+      tile.appendChild(actionsEl);
       bankImagesGrid.appendChild(tile);
 
       if (item.src) {
@@ -1878,16 +2002,114 @@
     });
   }
 
-  async function loadAndRenderUntitledCuration(force = false) {
+  // Atualiza o título de um item do banco: card (se houver) e cada tabuleiro onde ele aparece.
+  // Diferente da curadoria, não cria cards novos.
+  async function renameBankItem(item, newTitle) {
+    if (item.cardId) {
+      const { error } = await supabase.from("cards").update({ title: newTitle }).eq("id", item.cardId);
+      if (error) throw error;
+      const foundCard = cards.find(c => c.id === item.cardId);
+      if (foundCard) foundCard.title = newTitle;
+    }
+
+    for (const ref of (item.tierListRefs || [])) {
+      const { data: tlData, error: tlErr } = await supabase
+        .from("tier_lists")
+        .select("tiers, bank, row_metadata")
+        .eq("id", ref.tlId)
+        .single();
+      if (tlErr || !tlData) continue;
+
+      const matches = (i) => i && (i.src === item.src || i.id === ref.itemId);
+      const tiers = tlData.tiers || [];
+      const bank = tlData.bank || [];
+      const row_metadata = tlData.row_metadata || [];
+
+      tiers.forEach(t => (t.items || []).forEach(i => { if (matches(i)) i.title = newTitle; }));
+      bank.forEach(i => { if (matches(i)) i.title = newTitle; });
+      row_metadata.forEach(m => {
+        if (m && Array.isArray(m.unvoted_bank)) m.unvoted_bank.forEach(i => { if (matches(i)) i.title = newTitle; });
+      });
+
+      const { error: upErr } = await supabase.from("tier_lists").update({
+        tiers, bank, row_metadata, updated_at: new Date().toISOString()
+      }).eq("id", ref.tlId);
+      if (upErr) throw upErr;
+    }
+
+    item.title = newTitle;
+  }
+
+  // Remove o item de todos os bancos: cards e tabuleiros da Tier List.
+  async function deleteBankItem(item) {
+    if (item.cardId) {
+      const { error } = await supabase.from("cards").delete().eq("id", item.cardId);
+      if (error) throw error;
+      delete imageCache[item.cardId];
+      delete imageFetchPromises[item.cardId];
+      cards = cards.filter(c => c.id !== item.cardId);
+    }
+    if (item.src) {
+      const sameImage = cards.filter(c => c.imageDataUrl && c.imageDataUrl === item.src);
+      for (const mc of sameImage) {
+        await supabase.from("cards").delete().eq("id", mc.id);
+        delete imageCache[mc.id];
+        delete imageFetchPromises[mc.id];
+        cards = cards.filter(c => c.id !== mc.id);
+      }
+    }
+
+    for (const ref of (item.tierListRefs || [])) {
+      const { data: tlData, error: tlErr } = await supabase
+        .from("tier_lists")
+        .select("tiers, bank, row_metadata")
+        .eq("id", ref.tlId)
+        .single();
+      if (tlErr || !tlData) continue;
+
+      const keep = (i) => !(i && (i.src === item.src || i.id === ref.itemId));
+      const tiers = tlData.tiers || [];
+      const row_metadata = tlData.row_metadata || [];
+      tiers.forEach(t => { if (Array.isArray(t.items)) t.items = t.items.filter(keep); });
+      const bank = (tlData.bank || []).filter(keep);
+      row_metadata.forEach(m => {
+        if (m && Array.isArray(m.unvoted_bank)) m.unvoted_bank = m.unvoted_bank.filter(keep);
+      });
+      // Mantém a contagem por linha dos metadados em dia
+      tiers.forEach((t, idx) => {
+        const meta = row_metadata[idx];
+        if (meta && typeof meta.count === "number" && meta.name === t.name) meta.count = (t.items || []).length;
+      });
+
+      const { error: upErr } = await supabase.from("tier_lists").update({
+        tiers, bank, row_metadata, updated_at: new Date().toISOString()
+      }).eq("id", ref.tlId);
+      if (upErr) throw upErr;
+    }
+
+    const idx = bankItems.indexOf(item);
+    if (idx >= 0) bankItems.splice(idx, 1);
+  }
+
+  function refreshBankViews() {
+    if (bankItemsCache) bankItemsCache.at = Date.now();
+    updateBankBadges();
+    renderBankGrid();
+    loadAndRenderUntitledCuration(false, true);
+  }
+
+  async function loadAndRenderUntitledCuration(force = false, quiet = false) {
     if (!curationImagesGrid) return;
-    curationImagesGrid.innerHTML = `
-      <div style="grid-column: 1 / -1; text-align: center; padding: 3rem 1rem; color: var(--text-muted);">
-        <p style="font-size: 1.1rem; margin-bottom: 0.5rem;">🔍 Varrendo banco de dados e tabuleiros...</p>
-        <span style="font-size: 0.85rem;">Localizando imagens do sistema</span>
-      </div>
-    `;
-    if (curationEmptyMsg) curationEmptyMsg.style.display = "none";
-    if (bankImagesGrid) bankImagesGrid.innerHTML = "";
+    if (!quiet) {
+      curationImagesGrid.innerHTML = `
+        <div style="grid-column: 1 / -1; text-align: center; padding: 3rem 1rem; color: var(--text-muted);">
+          <p style="font-size: 1.1rem; margin-bottom: 0.5rem;">🔍 Varrendo banco de dados e tabuleiros...</p>
+          <span style="font-size: 0.85rem;">Localizando imagens do sistema</span>
+        </div>
+      `;
+      if (curationEmptyMsg) curationEmptyMsg.style.display = "none";
+      if (bankImagesGrid) bankImagesGrid.innerHTML = "";
+    }
 
     bankItems = await fetchAllBankItems(force);
     const items = bankItems.filter(i => isUntitledTitle(i.title));
