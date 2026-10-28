@@ -3315,10 +3315,9 @@
 
         // Title Header
         const headerEl = document.createElement("div");
-        headerEl.style.display = "flex";
-        headerEl.style.justifyContent = "space-between";
-        headerEl.style.alignItems = "center";
-        headerEl.style.marginBottom = "0.5rem";
+        headerEl.className = "saved-board-header";
+        const badgesEl = document.createElement("div");
+        badgesEl.className = "saved-board-badges";
 
         const titleEl = document.createElement("h3");
         titleEl.className = "saved-board-title";
@@ -3335,10 +3334,8 @@
           typeBadgeEl.style.borderRadius = "6px";
           typeBadgeEl.style.fontSize = "0.75rem";
           typeBadgeEl.style.fontWeight = "700";
-          typeBadgeEl.style.marginLeft = "auto";
-          typeBadgeEl.style.marginRight = "0.5rem";
           typeBadgeEl.textContent = "📋 Listagem";
-          headerEl.appendChild(typeBadgeEl);
+          badgesEl.appendChild(typeBadgeEl);
         }
 
         if (isFeaturedCard) {
@@ -3351,9 +3348,10 @@
           badgeEl.style.fontSize = "0.75rem";
           badgeEl.style.fontWeight = "700";
           badgeEl.textContent = "⭐ Destaque Global";
-          headerEl.appendChild(badgeEl);
+          badgesEl.appendChild(badgeEl);
         }
 
+        if (badgesEl.childElementCount > 0) headerEl.appendChild(badgesEl);
         card.appendChild(headerEl);
 
         // Mini CSS preview layout
@@ -3400,17 +3398,9 @@
         // Metadata footer
         const footerEl = document.createElement("div");
         footerEl.className = "saved-board-meta";
-        footerEl.style.display = "flex";
-        footerEl.style.alignItems = "center";
-        footerEl.style.justifyContent = "space-between";
-        footerEl.style.gap = "0.5rem";
-        footerEl.style.flexWrap = "wrap";
 
         const metaInfo = document.createElement("div");
-        metaInfo.style.display = "flex";
-        metaInfo.style.alignItems = "center";
-        metaInfo.style.gap = "0.75rem";
-        metaInfo.style.flexWrap = "wrap";
+        metaInfo.className = "saved-board-meta-info";
 
         const creatorEl = document.createElement("span");
         creatorEl.className = "saved-board-creator";
@@ -3432,9 +3422,7 @@
         // EXCLUSIVE ACTION FOR USER "lele": Feature & Change Owner Buttons
         if (isLeleUser) {
           const btnGroup = document.createElement("div");
-          btnGroup.style.display = "flex";
-          btnGroup.style.gap = "0.4rem";
-          btnGroup.style.alignItems = "center";
+          btnGroup.className = "saved-board-actions";
 
           const featureBtn = document.createElement("button");
           featureBtn.type = "button";

@@ -2184,33 +2184,29 @@ select {
   opacity: 1;
 }
 
-#saved-boards-list {
+/* Grade de cards quadrados dos tabuleiros (tela inicial da Tier List) */
+.board-cards-grid {
   display: grid;
-  grid-template-columns: 1fr;
-  gap: 1.5rem;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 1rem;
   width: 100%;
 }
 
-@media (min-width: 650px) {
-  #saved-boards-list {
-    grid-template-columns: 1fr 1fr;
-  }
-}
-
-@media (min-width: 950px) {
-  #saved-boards-list {
-    grid-template-columns: 1fr 1fr 1fr;
-  }
+/* Mensagens e carregamento ocupam a linha toda */
+.board-cards-grid > :not(.saved-board-card) {
+  grid-column: 1 / -1;
 }
 
 .saved-board-card {
   background: var(--surface-raised);
   border: 1px solid var(--border);
   border-radius: 12px;
-  padding: 1.25rem;
+  padding: 0.9rem;
+  aspect-ratio: 1 / 1; /* quadrado; cresce se o conteúdo precisar */
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: 0.55rem;
   transition: border-color 0.25s ease, transform 0.2s ease, box-shadow 0.2s ease;
   position: relative;
   cursor: pointer;
@@ -2222,8 +2218,29 @@ select {
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
 }
 
+.saved-board-header {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.saved-board-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.saved-board-badges span {
+  font-size: 0.68rem !important;
+  padding: 0.12rem 0.45rem !important;
+  white-space: nowrap;
+}
+
 .saved-board-title {
-  font-size: 1.1rem;
+  width: 100%;
+  font-size: 1rem;
   font-weight: 700;
   color: var(--text);
   margin: 0;
@@ -2242,14 +2259,15 @@ select {
   border-radius: 8px;
   padding: 4px;
   overflow: hidden;
-  height: 100px;
+  flex: 1 1 100px;
+  min-height: 90px;
 }
 
 .mini-board-row {
   display: flex;
   gap: 2px;
   flex: 1;
-  min-height: 10px;
+  min-height: 4px;
   overflow: hidden;
 }
 
@@ -2282,14 +2300,33 @@ select {
 .saved-board-meta {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
-  margin-top: 0.25rem;
+  align-items: flex-start;
+  gap: 0.4rem;
+  margin-top: auto;
+}
+
+.saved-board-meta-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.saved-board-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.saved-board-actions button {
+  font-size: 0.68rem !important;
+  padding: 0.2rem 0.45rem !important;
+  white-space: nowrap;
 }
 
 .saved-board-date {
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   color: var(--text-muted);
-  white-space: nowrap;
 }
 
 .saved-board-creator {
