@@ -3377,3 +3377,16 @@ html.page-entering-default .app > *:not(.top-nav) {
 .bank-tile__input:focus {
   border-color: var(--accent);
 }
+
+.site-bank-tile {
+  cursor: grab;
+}
+
+.site-bank-tile.in-board {
+  opacity: 0.5;
+}
+
+.site-bank-tile.in-board .bank-tile__btn::after {
+  content: " (já no tabuleiro)";
+  font-weight: 400;
+}

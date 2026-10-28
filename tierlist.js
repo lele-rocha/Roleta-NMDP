@@ -274,6 +274,10 @@
     const unvotedSection = document.getElementById("unvoted-bank-section");
     if (unvotedSection) unvotedSection.style.display = isList ? "none" : "";
 
+    // Banco de Imagens do Site: só quem pode editar o tabuleiro adiciona imagens ao banco dele
+    const siteBankSectionEl = document.getElementById("site-bank-section");
+    if (siteBankSectionEl) siteBankSectionEl.style.display = canEdit ? "" : "none";
+
     // Row controls visibility (only 'lele' can edit rows)
     document.querySelectorAll(".btn-tier-ctrl, .tier-controls").forEach(ctrl => {
       ctrl.style.display = canEdit ? "flex" : "none";
@@ -2528,6 +2532,278 @@
     if (tierCardSuggestions && !tierCardSuggestions.contains(e.target) && e.target !== tierSearchCardInput) {
       tierCardSuggestions.hidden = true;
     }
+  });
+
+  // --- Banco de Imagens do Site: pesquisa e adiciona imagens ao banco interno do tabuleiro ---
+  const siteBankSearch = document.getElementById("site-bank-search");
+  const siteBankGrid = document.getElementById("site-bank-grid");
+  const siteBankCount = document.getElementById("site-bank-count");
+  const siteBankStatus = document.getElementById("site-bank-status");
+  const siteBankMoreBtn = document.getElementById("site-bank-more");
+  const SITE_BANK_PAGE = 60;
+
+  let siteBankItems = null;      // [{ kind: "card"|"tier", id, cardId?, title, src, origin }]
+  let siteBankLoading = null;
+  let siteBankShown = SITE_BANK_PAGE;
+  let siteBankObserver = null;
+  let draggedSiteItem = null;
+  const siteBankCardImages = new Map(); // cardId -> data URL
+
+  function isGenericImageTitle(title) {
+    const t = (title || "").trim().toLowerCase();
+    return !t || t.startsWith("image.") || t.startsWith("image_") ||
+      t === "item sem título" || t === "sem titulo" || t === "sem título" || t === "novo item";
+  }
+
+  function normalizeSiteText(str) {
+    return (str || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  }
+
+  async function loadSiteBankItems() {
+    if (siteBankItems) return siteBankItems;
+    if (siteBankLoading) return siteBankLoading;
+    if (!supabase) return [];
+
+    siteBankLoading = (async () => {
+      const items = [];
+      const cardIds = new Set();
+      const seenTitles = new Set();
+      const seenSrcs = new Set();
+
+      // 1. Cards das galerias (só id e título; a imagem é baixada sob demanda)
+      try {
+        const { data, error } = await supabase.from("cards").select("id, title");
+        if (error) throw error;
+        (data || []).forEach(c => {
+          cardIds.add(c.id);
+          if (!isGenericImageTitle(c.title)) seenTitles.add(normalizeSiteText(c.title));
+          items.push({ kind: "card", id: "item-" + c.id, cardId: c.id, title: c.title || "", src: null, origin: "Galeria" });
+        });
+      } catch (e) {
+        console.warn("Erro ao carregar cards para o banco de imagens:", e);
+      }
+
+      // 2. Itens de tabuleiros (sem repetir imagens que já são cards)
+      try {
+        const { data, error } = await supabase.from("tier_lists").select("id, title, tiers, bank, row_metadata");
+        if (error) throw error;
+        (data || []).forEach(tl => {
+          const metaUnvoted = (tl.row_metadata || []).find(m => m && m.unvoted_bank)?.unvoted_bank || [];
+          const all = [...(tl.tiers || []).flatMap(t => t.items || []), ...(tl.bank || []), ...metaUnvoted];
+          all.forEach(item => {
+            if (!item || !item.src || seenSrcs.has(item.src)) return;
+            if ((item.id || "").startsWith("item-") && cardIds.has(item.id.slice(5))) return;
+            const nt = normalizeSiteText(item.title);
+            if (!isGenericImageTitle(item.title) && seenTitles.has(nt)) return;
+            seenSrcs.add(item.src);
+            if (!isGenericImageTitle(item.title)) seenTitles.add(nt);
+            items.push({ kind: "tier", id: item.id || "", title: item.title || "", src: item.src, origin: `Tier List: ${tl.title}` });
+          });
+        });
+      } catch (e) {
+        console.warn("Erro ao carregar itens de tabuleiros para o banco de imagens:", e);
+      }
+
+      items.sort((a, b) => {
+        const au = isGenericImageTitle(a.title), bu = isGenericImageTitle(b.title);
+        if (au !== bu) return au ? 1 : -1;
+        return (a.title || "").localeCompare(b.title || "", "pt-BR");
+      });
+
+      siteBankItems = items;
+      siteBankLoading = null;
+      return items;
+    })();
+
+    return siteBankLoading;
+  }
+
+  async function fetchSiteCardImage(cardId) {
+    if (siteBankCardImages.has(cardId)) return siteBankCardImages.get(cardId);
+    try {
+      const { data, error } = await supabase.from("cards").select("image_data_url").eq("id", cardId).single();
+      if (error) throw error;
+      const src = (data && data.image_data_url) || null;
+      siteBankCardImages.set(cardId, src);
+      return src;
+    } catch (e) {
+      console.warn("Erro ao buscar imagem do card:", cardId, e);
+      siteBankCardImages.set(cardId, null);
+      return null;
+    }
+  }
+
+  async function addSiteImageToBoard(entry, tileEl) {
+    if (!canUserEditActiveBoard()) {
+      alert("Apenas quem pode editar este tabuleiro consegue adicionar imagens ao banco dele.");
+      return;
+    }
+
+    const src = entry.src || (entry.cardId ? await fetchSiteCardImage(entry.cardId) : null);
+    if (!src) {
+      alert("Não foi possível carregar esta imagem.");
+      return;
+    }
+
+    const onBoard = [...document.querySelectorAll(".tier-item-img")];
+    if (onBoard.some(img => img.src === src || img.dataset.id === entry.id)) {
+      showAutoSaveToast("Esta imagem já está neste tabuleiro.");
+      if (tileEl) tileEl.classList.add("in-board");
+      return;
+    }
+
+    // Evita colidir com ids já usados no tabuleiro
+    const usedIds = new Set(onBoard.map(img => img.dataset.id));
+    let newId = entry.id;
+    if (!newId || usedIds.has(newId)) {
+      newId = "item-" + Math.random().toString(36).slice(2, 9);
+    }
+
+    bankContainer.appendChild(createItemElement({ id: newId, src, title: entry.title || "" }));
+    saveBoardState();
+    if (activeBoardId && supabase) autoSaveActiveBoard();
+
+    if (tileEl) tileEl.classList.add("in-board");
+    showAutoSaveToast(`🖼️ "${entry.title || "Imagem"}" adicionada ao banco do tabuleiro`);
+  }
+
+  function renderSiteBank() {
+    if (!siteBankGrid || !siteBankItems) return;
+    if (siteBankObserver) {
+      siteBankObserver.disconnect();
+      siteBankObserver = null;
+    }
+    siteBankGrid.innerHTML = "";
+
+    const query = normalizeSiteText(siteBankSearch ? siteBankSearch.value.trim() : "");
+    const filtered = siteBankItems.filter(i => !query || normalizeSiteText(i.title).includes(query));
+    const visible = filtered.slice(0, siteBankShown);
+
+    if (siteBankCount) {
+      siteBankCount.textContent = query
+        ? `${filtered.length} de ${siteBankItems.length} imagens`
+        : `${siteBankItems.length} imagens`;
+    }
+    if (siteBankStatus) {
+      siteBankStatus.style.display = filtered.length === 0 ? "block" : "none";
+      siteBankStatus.textContent = "Nenhuma imagem encontrada para essa busca.";
+    }
+    if (siteBankMoreBtn) {
+      const remaining = filtered.length - visible.length;
+      siteBankMoreBtn.hidden = remaining <= 0;
+      siteBankMoreBtn.textContent = `Mostrar mais (${remaining})`;
+    }
+
+    if ("IntersectionObserver" in window) {
+      siteBankObserver = new IntersectionObserver((entries) => {
+        entries.forEach(en => {
+          if (!en.isIntersecting) return;
+          siteBankObserver.unobserve(en.target);
+          if (en.target._loadImage) en.target._loadImage();
+        });
+      }, { rootMargin: "300px 0px", threshold: 0.01 });
+    }
+
+    const presentIds = new Set([...document.querySelectorAll(".tier-item-img")].map(i => i.dataset.id));
+    const presentSrcs = new Set([...document.querySelectorAll(".tier-item-img")].map(i => i.src));
+
+    visible.forEach(entry => {
+      const tile = document.createElement("div");
+      tile.className = "bank-tile site-bank-tile";
+      tile.draggable = true;
+      tile.title = entry.title || "Sem título";
+      if (presentIds.has(entry.id) || (entry.src && presentSrcs.has(entry.src))) tile.classList.add("in-board");
+
+      const imgWrap = document.createElement("div");
+      imgWrap.className = "bank-tile__img";
+      const img = document.createElement("img");
+      img.alt = entry.title || "Imagem";
+      img.draggable = false;
+      imgWrap.appendChild(img);
+
+      const titleEl = document.createElement("div");
+      titleEl.className = "bank-tile__title" + (isGenericImageTitle(entry.title) ? " bank-tile__title--untitled" : "");
+      titleEl.textContent = isGenericImageTitle(entry.title) ? "Sem título" : entry.title;
+
+      const originEl = document.createElement("div");
+      originEl.className = "bank-tile__source";
+      originEl.textContent = entry.origin || "";
+
+      const addBtn = document.createElement("button");
+      addBtn.type = "button";
+      addBtn.className = "bank-tile__btn";
+      addBtn.textContent = "➕ Adicionar";
+      addBtn.title = "Adicionar ao banco deste tabuleiro";
+      addBtn.addEventListener("click", () => addSiteImageToBoard(entry, tile));
+
+      tile.addEventListener("dragstart", (e) => {
+        draggedSiteItem = { entry, tile };
+        e.dataTransfer.setData("text/plain", entry.id || "site-bank-item");
+        e.dataTransfer.effectAllowed = "copy";
+      });
+      tile.addEventListener("dragend", () => { draggedSiteItem = null; });
+
+      tile.appendChild(imgWrap);
+      tile.appendChild(titleEl);
+      tile.appendChild(originEl);
+      tile.appendChild(addBtn);
+      siteBankGrid.appendChild(tile);
+
+      if (entry.src) {
+        img.src = entry.src;
+      } else if (entry.cardId) {
+        tile._loadImage = () => {
+          fetchSiteCardImage(entry.cardId).then(src => {
+            if (src) img.src = src;
+          });
+        };
+        if (siteBankObserver) siteBankObserver.observe(tile);
+        else tile._loadImage();
+      }
+    });
+  }
+
+  async function ensureSiteBankLoaded() {
+    if (siteBankItems) return;
+    if (siteBankStatus) {
+      siteBankStatus.style.display = "block";
+      siteBankStatus.textContent = "⏳ Carregando imagens do site...";
+    }
+    await loadSiteBankItems();
+    siteBankShown = SITE_BANK_PAGE;
+    renderSiteBank();
+  }
+
+  if (siteBankSearch) {
+    let siteBankTimer = null;
+    siteBankSearch.addEventListener("focus", ensureSiteBankLoaded);
+    siteBankSearch.addEventListener("input", async () => {
+      await ensureSiteBankLoaded();
+      clearTimeout(siteBankTimer);
+      siteBankTimer = setTimeout(() => {
+        siteBankShown = SITE_BANK_PAGE;
+        renderSiteBank();
+      }, 150);
+    });
+  }
+
+  if (siteBankMoreBtn) {
+    siteBankMoreBtn.addEventListener("click", () => {
+      siteBankShown += SITE_BANK_PAGE;
+      renderSiteBank();
+    });
+  }
+
+  // Soltar uma imagem do banco do site sobre o banco interno do tabuleiro
+  bankContainer.addEventListener("dragover", (e) => {
+    if (draggedSiteItem) e.preventDefault();
+  });
+  bankContainer.addEventListener("drop", (e) => {
+    if (!draggedSiteItem) return;
+    e.preventDefault();
+    const { entry, tile } = draggedSiteItem;
+    draggedSiteItem = null;
+    addSiteImageToBoard(entry, tile);
   });
 
   // --- Supabase Cards Importing ---

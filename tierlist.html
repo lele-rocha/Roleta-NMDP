@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Roleta NMDP - Tier List</title>
-  <link rel="stylesheet" href="style.css?v=37">
+  <link rel="stylesheet" href="style.css?v=38">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700;800&family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
@@ -258,6 +258,23 @@
             </p>
           </div>
         </section>
+
+        <!-- Banco de Imagens do Site: pesquisar e adicionar ao banco deste tabuleiro -->
+        <section id="site-bank-section" class="panel" style="padding: 1.5rem; display: none;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; flex-wrap: wrap; gap: 0.5rem;">
+            <h3 class="label" style="margin: 0;">🖼️ Banco de Imagens do Site</h3>
+            <span id="site-bank-count" class="bank-count"></span>
+          </div>
+          <p style="margin: 0 0 0.75rem; font-size: 0.82rem; color: var(--text-muted);">
+            Pesquise uma imagem, clique em "Adicionar" (ou arraste) para trazê-la ao banco deste tabuleiro e depois arraste do banco para as categorias.
+          </p>
+          <input type="text" id="site-bank-search" class="input-text" placeholder="🔍 Pesquisar imagem por título (clique para carregar o banco)..." autocomplete="off" style="width: 100%;" />
+          <p id="site-bank-status" style="display: none; margin: 0.85rem 0 0; text-align: center; color: var(--text-muted); font-size: 0.9rem;"></p>
+          <div id="site-bank-grid" class="bank-grid" style="margin-top: 0.85rem;"></div>
+          <div style="text-align: center; margin-top: 1rem;">
+            <button type="button" id="site-bank-more" class="btn-secondary" hidden>Mostrar mais</button>
+          </div>
+        </section>
       </div>
     </main>
   </div>
@@ -468,6 +485,6 @@
   <script src="config.js?v=33"></script>
   <script src="users-panel.js?v=1"></script>
   <script src="ambient-bg.js?v=33"></script>
-  <script src="tierlist.js?v=36"></script>
+  <script src="tierlist.js?v=37"></script>
 </body>
 </html>
