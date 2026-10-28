@@ -136,6 +136,7 @@
   let boardTitle = "Minha Tier List";
   let activeBoardIsFeatured = false;
   let activeBoardCreatedBy = null;
+  let activeBoardType = "rating"; // "rating" (com notas) | "list" (listagem, sem notas)
   let tiersData = [];
   let bankData = [];
   let unvotedBankData = [];
@@ -206,6 +207,23 @@
     });
   }
 
+  function isListBoard() {
+    return activeBoardType === "list";
+  }
+
+  function getBoardTypeFromMeta(rowMetadata) {
+    if (Array.isArray(rowMetadata)) {
+      const meta = rowMetadata.find(m => m && typeof m.board_type === "string");
+      if (meta && meta.board_type === "list") return "list";
+    }
+    return "rating";
+  }
+
+  // Em tabuleiros de listagem só quem pode editar reorganiza as imagens (não há votação)
+  function canUserArrangeActiveBoard() {
+    return isListBoard() ? canUserEditActiveBoard() : canUserVoteOnActiveBoard();
+  }
+
   function canUserVoteOnActiveBoard() {
     if (activeBoardIsFeatured) return true;
     const sessionUser = loadSessionUser().toLowerCase();
@@ -249,8 +267,12 @@
     if (clearAllBtn) clearAllBtn.style.display = canEdit ? "inline-block" : "none";
     if (deleteBoardBtn) deleteBoardBtn.style.display = (canEdit && activeBoardId) ? "inline-block" : "none";
     if (changeOwnerBtn) changeOwnerBtn.style.display = (canEdit && activeBoardId) ? "inline-block" : "none";
-    if (openThresholdsBtn) openThresholdsBtn.style.display = canEdit ? "inline-block" : "none";
-    if (editParametersBtn) editParametersBtn.style.display = canEdit ? "inline-block" : "none";
+    const isList = isListBoard();
+    if (openThresholdsBtn) openThresholdsBtn.style.display = (canEdit && !isList) ? "inline-block" : "none";
+    if (editParametersBtn) editParametersBtn.style.display = (canEdit && !isList) ? "inline-block" : "none";
+
+    const unvotedSection = document.getElementById("unvoted-bank-section");
+    if (unvotedSection) unvotedSection.style.display = isList ? "none" : "";
 
     // Row controls visibility (only 'lele' can edit rows)
     document.querySelectorAll(".btn-tier-ctrl, .tier-controls").forEach(ctrl => {
@@ -282,7 +304,15 @@
 
     if (permNotice) {
       const sessionUser = loadSessionUser();
-      if (activeBoardIsFeatured) {
+      if (isList) {
+        permNotice.style.background = "rgba(52, 152, 219, 0.15)";
+        permNotice.style.color = "#3498db";
+        permNotice.style.border = "1px solid rgba(52, 152, 219, 0.4)";
+        const globalTag = activeBoardIsFeatured ? "⭐ Global • " : "";
+        permNotice.textContent = canEdit
+          ? `📋 ${globalTag}Listagem (sem notas) • Você pode organizar e editar`
+          : `📋 ${globalTag}Listagem (sem notas) • Somente visualização`;
+      } else if (activeBoardIsFeatured) {
         permNotice.style.background = "rgba(255, 215, 0, 0.15)";
         permNotice.style.color = "#ffd700";
         permNotice.style.border = "1px solid rgba(255, 215, 0, 0.4)";
@@ -370,6 +400,7 @@
     });
 
     state.activeBoardIsFeatured = activeBoardIsFeatured;
+    state.activeBoardType = activeBoardType;
     state.activeBoardCreatedBy = activeBoardCreatedBy;
     state.activeBoardRatings = activeBoardRatings;
     state.activeBoardParameters = activeBoardParameters;
@@ -399,6 +430,7 @@
         bankData = parsed.bank || [];
         unvotedBankData = parsed.unvotedBank || [];
         activeBoardIsFeatured = parsed.activeBoardIsFeatured || false;
+        activeBoardType = parsed.activeBoardType === "list" ? "list" : "rating";
         activeBoardCreatedBy = parsed.activeBoardCreatedBy || null;
         activeBoardRatings = parsed.activeBoardRatings || {};
         activeBoardParameters = parsed.activeBoardParameters || [];
@@ -408,6 +440,7 @@
       }
     }
     activeBoardIsFeatured = false;
+    activeBoardType = "rating";
     activeBoardCreatedBy = null;
     activeBoardRatings = {};
     activeBoardParameters = [];
@@ -493,7 +526,9 @@
     label.dataset.color = tier.color;
 
     const minScoreVal = getRowMinScore(tier, index, tiersData.length);
-    label.title = `Categoria: ${tier.name} (Nota Mínima Requerida: ≥ ${minScoreVal.toFixed(1)})`;
+    label.title = isListBoard()
+      ? `Categoria: ${tier.name}`
+      : `Categoria: ${tier.name} (Nota Mínima Requerida: ≥ ${minScoreVal.toFixed(1)})`;
 
     label.addEventListener("click", () => openRowSettings(tier.id));
 
@@ -830,27 +865,34 @@
         });
       });
 
-      if (activeBoardIsFeatured) {
-        row_metadata.push({
-          is_featured: true,
-          ratings: activeBoardRatings
-        });
-      } else if (Object.keys(activeBoardRatings).length > 0) {
-        row_metadata.push({
-          ratings: activeBoardRatings
-        });
-      }
+      if (isListBoard()) {
+        row_metadata.push({ board_type: "list" });
+        if (activeBoardIsFeatured) {
+          row_metadata.push({ is_featured: true });
+        }
+      } else {
+        if (activeBoardIsFeatured) {
+          row_metadata.push({
+            is_featured: true,
+            ratings: activeBoardRatings
+          });
+        } else if (Object.keys(activeBoardRatings).length > 0) {
+          row_metadata.push({
+            ratings: activeBoardRatings
+          });
+        }
 
-      if (Array.isArray(activeBoardParameters) && activeBoardParameters.length > 0) {
-        row_metadata.push({
-          parameters: activeBoardParameters
-        });
-      }
+        if (Array.isArray(activeBoardParameters) && activeBoardParameters.length > 0) {
+          row_metadata.push({
+            parameters: activeBoardParameters
+          });
+        }
 
-      if (Array.isArray(unvotedBankData) && unvotedBankData.length > 0) {
-        row_metadata.push({
-          unvoted_bank: unvotedBankData
-        });
+        if (Array.isArray(unvotedBankData) && unvotedBankData.length > 0) {
+          row_metadata.push({
+            unvoted_bank: unvotedBankData
+          });
+        }
       }
 
       const upsertPayload = {
@@ -1086,6 +1128,9 @@
   }
 
   function applyFeaturedAutoSorting() {
+    // Listagem não tem notas: as imagens ficam exatamente onde foram colocadas
+    if (isListBoard()) return;
+
     // Collect all placed items and unvoted bank items
     const allPlacedItems = [];
     tiersData.forEach(tier => {
@@ -1464,6 +1509,16 @@
     }
   });
 
+  function renameListItem(itemId, imgEl) {
+    const currentTitle = imgEl.title || "";
+    const newTitle = prompt("Digite o título/nome deste item:", currentTitle);
+    if (newTitle === null || !newTitle.trim()) return;
+    const clean = newTitle.trim();
+    imgEl.title = clean;
+    saveBoardState();
+    autoSaveActiveBoard();
+  }
+
   function createItemElement(item) {
     if (!item.id) {
       item.id = "item-" + Date.now().toString(36) + "-" + Math.random().toString(36).substr(2, 5);
@@ -1491,7 +1546,7 @@
     const itemRatings = activeBoardRatings[item.id] || [];
     const hasVoted = itemRatings.some(r => (r.userName || "").toLowerCase() === sessionUser);
 
-    if (!hasVoted && canUserVoteOnActiveBoard()) {
+    if (!isListBoard() && !hasVoted && canUserVoteOnActiveBoard()) {
       const badge = document.createElement("span");
       badge.className = "unvoted-warning-badge";
       badge.title = "Você ainda não avaliou este item!";
@@ -1504,6 +1559,11 @@
     // Click on item inside tier list row opens Floating Inline Rating Card Popover
     img.addEventListener("click", (e) => {
       e.stopPropagation();
+      if (isListBoard()) {
+        // Listagem: sem notas. Quem pode editar apenas renomeia o item.
+        if (canUserEditActiveBoard()) renameListItem(item.id, img);
+        return;
+      }
       if (!canUserVoteOnActiveBoard()) {
         const creatorName = activeBoardCreatedBy || "o criador";
         alert(`Apenas o criador deste tabuleiro (${creatorName}) pode votar nele.`);
@@ -1519,7 +1579,7 @@
 
   function setupDragEvents(el) {
     el.addEventListener("dragstart", (e) => {
-      if (!canUserVoteOnActiveBoard()) {
+      if (!canUserArrangeActiveBoard()) {
         e.preventDefault();
         return false;
       }
@@ -1557,7 +1617,9 @@
         const itemId = el.dataset.id;
         const stats = getItemRatingStats(itemId);
 
-        if (imageHoverPreviewRatingBox && hoverAvgRating && hoverUserRatingsList) {
+        if (isListBoard() && imageHoverPreviewRatingBox) {
+          imageHoverPreviewRatingBox.style.display = "none";
+        } else if (imageHoverPreviewRatingBox && hoverAvgRating && hoverUserRatingsList) {
           imageHoverPreviewRatingBox.style.display = "block";
           if (stats.count > 0) {
             const isLeleHover = loadSessionUser().toLowerCase() === "lele";
@@ -1654,7 +1716,7 @@
   function setupDropzoneEvents(zone) {
     zone.addEventListener("dragover", (e) => {
       e.preventDefault();
-      if (!canUserVoteOnActiveBoard()) return;
+      if (!canUserArrangeActiveBoard()) return;
       zone.classList.add("drag-over");
 
       // Implement inline sorting placement
@@ -1670,7 +1732,7 @@
 
     zone.addEventListener("dragenter", (e) => {
       e.preventDefault();
-      if (!canUserVoteOnActiveBoard()) return;
+      if (!canUserArrangeActiveBoard()) return;
       zone.classList.add("drag-over");
     });
 
@@ -1681,7 +1743,7 @@
     zone.addEventListener("drop", (e) => {
       e.preventDefault();
       zone.classList.remove("drag-over");
-      if (!canUserVoteOnActiveBoard()) return;
+      if (!canUserArrangeActiveBoard()) return;
 
       if (draggedEl) {
         const afterElement = getDragAfterElement(zone, e.clientX);
@@ -1692,6 +1754,12 @@
         }
       }
       saveBoardState();
+
+      if (isListBoard()) {
+        // Listagem: salva a nova posição direto na nuvem, sem abrir cartão de nota
+        if (activeBoardId) autoSaveActiveBoard();
+        return;
+      }
 
       if (draggedEl && zone.classList.contains("tier-items")) {
         const img = draggedEl.querySelector(".tier-item-img") || draggedEl;
@@ -1763,7 +1831,7 @@
     const isLele = canUserEditActiveBoard();
 
     if (minScoreGroup) {
-      minScoreGroup.style.display = isLele ? "block" : "none";
+      minScoreGroup.style.display = (isLele && !isListBoard()) ? "block" : "none";
     }
     if (minScoreInput) {
       const rowIndex = tiersData.findIndex(t => t.id === rowId);
@@ -1789,7 +1857,7 @@
     const tier = tiersData.find(t => t.id === activeEditingRowId);
     const minScoreInput = document.getElementById("row-min-score-input");
 
-    if (tier && minScoreInput && canUserEditActiveBoard()) {
+    if (tier && minScoreInput && canUserEditActiveBoard() && !isListBoard()) {
       const parsedVal = parseFloat(minScoreInput.value);
       if (!isNaN(parsedVal)) {
         tier.minScore = Math.max(0, Math.min(10, parsedVal));
@@ -1809,13 +1877,15 @@
       labelEl.style.backgroundColor = selectedPresetColor;
     }
 
-    if (activeBoardIsFeatured) {
+    if (activeBoardIsFeatured && !isListBoard()) {
       applyFeaturedAutoSorting();
-      if (supabase) autoSaveFeaturedBoard();
     } else {
       renderBoard();
     }
     saveBoardState();
+    if (activeBoardIsFeatured && supabase && activeBoardId && canUserEditActiveBoard()) {
+      autoSaveActiveBoard();
+    }
     closeRowSettings();
   });
 
@@ -2844,31 +2914,38 @@
         }
       }
 
-      // Merge remote ratings first so manual saves also preserve all other users' ratings
-      await mergeRemoteRatings();
+      if (isListBoard()) {
+        row_metadata.push({ board_type: "list" });
+        if (activeBoardIsFeatured) {
+          row_metadata.push({ is_featured: true });
+        }
+      } else {
+        // Merge remote ratings first so manual saves also preserve all other users' ratings
+        await mergeRemoteRatings();
 
-      // Preserve featured status, ratings, parameters, and unvotedBank inside row_metadata array
-      if (activeBoardIsFeatured) {
-        row_metadata.push({
-          is_featured: true,
-          ratings: activeBoardRatings
-        });
-      } else if (Object.keys(activeBoardRatings).length > 0) {
-        row_metadata.push({
-          ratings: activeBoardRatings
-        });
-      }
+        // Preserve featured status, ratings, parameters, and unvotedBank inside row_metadata array
+        if (activeBoardIsFeatured) {
+          row_metadata.push({
+            is_featured: true,
+            ratings: activeBoardRatings
+          });
+        } else if (Object.keys(activeBoardRatings).length > 0) {
+          row_metadata.push({
+            ratings: activeBoardRatings
+          });
+        }
 
-      if (Array.isArray(activeBoardParameters) && activeBoardParameters.length > 0) {
-        row_metadata.push({
-          parameters: activeBoardParameters
-        });
-      }
+        if (Array.isArray(activeBoardParameters) && activeBoardParameters.length > 0) {
+          row_metadata.push({
+            parameters: activeBoardParameters
+          });
+        }
 
-      if (Array.isArray(unvotedBankData) && unvotedBankData.length > 0) {
-        row_metadata.push({
-          unvoted_bank: unvotedBankData
-        });
+        if (Array.isArray(unvotedBankData) && unvotedBankData.length > 0) {
+          row_metadata.push({
+            unvoted_bank: unvotedBankData
+          });
+        }
       }
 
       saveBoardBtn.textContent = "Salvando...";
@@ -3078,6 +3155,21 @@
         titleEl.style.margin = "0";
         titleEl.textContent = board.title || "Sem Título";
         headerEl.appendChild(titleEl);
+
+        if (getBoardTypeFromMeta(board.row_metadata) === "list") {
+          const typeBadgeEl = document.createElement("span");
+          typeBadgeEl.style.background = "rgba(52, 152, 219, 0.15)";
+          typeBadgeEl.style.color = "#3498db";
+          typeBadgeEl.style.border = "1px solid rgba(52, 152, 219, 0.4)";
+          typeBadgeEl.style.padding = "0.2rem 0.55rem";
+          typeBadgeEl.style.borderRadius = "6px";
+          typeBadgeEl.style.fontSize = "0.75rem";
+          typeBadgeEl.style.fontWeight = "700";
+          typeBadgeEl.style.marginLeft = "auto";
+          typeBadgeEl.style.marginRight = "0.5rem";
+          typeBadgeEl.textContent = "📋 Listagem";
+          headerEl.appendChild(typeBadgeEl);
+        }
 
         if (isFeaturedCard) {
           const badgeEl = document.createElement("span");
@@ -3296,6 +3388,7 @@
             boardTitle = board.title;
             activeBoardIsFeatured = isFeaturedCard || isBoardFeatured(details) || isBoardFeatured(board);
             activeBoardCreatedBy = details.created_by || board.created_by || "Anônimo";
+            activeBoardType = getBoardTypeFromMeta(details.row_metadata || board.row_metadata);
             tiersData = JSON.parse(JSON.stringify(details.tiers || []));
             bankData = JSON.parse(JSON.stringify(details.bank || []));
 
@@ -3442,6 +3535,7 @@ CREATE POLICY "Allow delete" ON public.tier_lists FOR DELETE USING (true);</pre>
       // Reset editor session
       activeBoardId = null;
       activeBoardIsFeatured = false;
+      activeBoardType = "rating";
       activeBoardCreatedBy = null;
       activeEditing = false;
       boardTitle = "Minha Tier List";
@@ -3753,6 +3847,15 @@ CREATE POLICY "Allow delete" ON public.tier_lists FOR DELETE USING (true);</pre>
 
   // --- Setup Landing Screen Events ---
 
+  // Parâmetros de avaliação só fazem sentido em tabuleiros com notas
+  document.querySelectorAll('input[name="setup-type"]').forEach(radio => {
+    radio.addEventListener("change", () => {
+      const paramsGroup = document.getElementById("setup-params-group");
+      const checked = document.querySelector('input[name="setup-type"]:checked');
+      if (paramsGroup) paramsGroup.style.display = (checked && checked.value === "list") ? "none" : "";
+    });
+  });
+
   toggleSetupBtn.addEventListener("click", () => {
     setupCollapseContainer.classList.toggle("expanded");
     const isExpanded = setupCollapseContainer.classList.contains("expanded");
@@ -3795,7 +3898,11 @@ CREATE POLICY "Allow delete" ON public.tier_lists FOR DELETE USING (true);</pre>
     activeBoardId = null;
     activeBoardIsFeatured = false;
     activeBoardCreatedBy = localStorage.getItem("roleta-nmdp-session") || "Anônimo";
-    activeBoardParameters = [...setupParameters];
+    const typeChoice = document.querySelector('input[name="setup-type"]:checked');
+    activeBoardType = (typeChoice && typeChoice.value === "list") ? "list" : "rating";
+    activeBoardRatings = {};
+    unvotedBankData = [];
+    activeBoardParameters = isListBoard() ? [] : [...setupParameters];
     deleteBoardBtn.style.display = "none";
 
     // Template selection
@@ -3875,6 +3982,7 @@ CREATE POLICY "Allow delete" ON public.tier_lists FOR DELETE USING (true);</pre>
       activeEditing = false;
       activeBoardId = null;
       activeBoardIsFeatured = false;
+      activeBoardType = "rating";
       activeBoardCreatedBy = null;
       activeBoardParameters = [];
       setupParameters = [];
@@ -3924,6 +4032,7 @@ CREATE POLICY "Allow delete" ON public.tier_lists FOR DELETE USING (true);</pre>
             .single();
 
           if (details) {
+            activeBoardType = getBoardTypeFromMeta(details.row_metadata);
             if (Array.isArray(details.tiers)) tiersData = JSON.parse(JSON.stringify(details.tiers));
             if (Array.isArray(details.bank)) bankData = JSON.parse(JSON.stringify(details.bank));
 
