@@ -28,6 +28,11 @@
   const curationImagesGrid = document.getElementById("curation-images-grid");
   const curationEmptyMsg = document.getElementById("curation-empty-msg");
   const refreshCurationBtn = document.getElementById("refresh-curation-btn");
+  const bankImagesGrid = document.getElementById("bank-images-grid");
+  const bankSearchInput = document.getElementById("bank-search-input");
+  const bankCountEl = document.getElementById("bank-count");
+  const bankEmptyMsg = document.getElementById("bank-empty-msg");
+  const untitledExpanderBadge = document.getElementById("untitled-expander-badge");
 
   // Dropdown toggle controls
   const toggleControlsBtn = document.getElementById("toggle-controls-btn");
@@ -103,7 +108,7 @@
 
   function getActiveGallery() {
     if (currentGallerySlug === "__curation_untitled__") {
-      return { owner: "lele", slug: "__curation_untitled__", name: "Sem Título", icon: "🏷️" };
+      return { owner: "lele", slug: "__curation_untitled__", name: "Banco de Imagens", icon: "🖼️" };
     }
     const all = getAllGalleries();
     const found = all.find(g => g.owner.toLowerCase() === currentGalleryOwner.toLowerCase() && g.slug.toLowerCase() === currentGallerySlug.toLowerCase());
@@ -302,8 +307,8 @@
           curBtn.className = "gallery-tab gallery-tab--curation" + (isCurating ? " active" : "");
           curBtn.style.border = "1px dashed #ff9f43";
           curBtn.style.color = isCurating ? "#fff" : "#ff9f43";
-          const countDisplay = (cachedUntitledCount !== null) ? cachedUntitledCount : "...";
-          curBtn.innerHTML = `🏷️ Sem Título <span id="untitled-curation-tab-badge" style="background:#ff9f43; color:#000; font-size:0.75rem; font-weight:800; padding: 2px 6px; border-radius: 10px; margin-left: 4px;">${countDisplay}</span>`;
+          const countDisplay = bankItemsCache ? bankItems.length : "...";
+          curBtn.innerHTML = `🖼️ Banco de Imagens <span id="bank-tab-badge" style="background:#ff9f43; color:#000; font-size:0.75rem; font-weight:800; padding: 2px 6px; border-radius: 10px; margin-left: 4px;">${countDisplay}</span>`;
           curBtn.addEventListener("click", () => {
             currentGalleryOwner = "lele";
             currentGallerySlug = "__curation_untitled__";
@@ -335,7 +340,7 @@
     // 4. Update Header Title
     if (votingGalleryTitle) {
       if (currentGallerySlug === "__curation_untitled__") {
-        votingGalleryTitle.textContent = `🏷️ Curadoria de Imagens Sem Título`;
+        votingGalleryTitle.textContent = `🖼️ Banco de Imagens`;
       } else {
         const activeG = getActiveGallery();
         votingGalleryTitle.textContent = `${activeG.icon || '📁'} Galeria de ${activeG.name} (${activeG.owner})`;
@@ -345,7 +350,7 @@
     // 5. Update Form Badge
     if (activeCategoryFormBadge) {
       if (currentGallerySlug === "__curation_untitled__") {
-        activeCategoryFormBadge.textContent = `Curadoria`;
+        activeCategoryFormBadge.textContent = `Banco de Imagens`;
       } else {
         const activeG = getActiveGallery();
         activeCategoryFormBadge.textContent = `${activeG.name} (${activeG.owner})`;
@@ -369,6 +374,10 @@
         }).length;
       }
       activeUserVotes.textContent = categoryVotes;
+
+      // O Banco de Imagens não tem votação
+      const votesStatusEl = activeUserVotes.closest(".user-votes-status");
+      if (votesStatusEl) votesStatusEl.style.display = currentGallerySlug === "__curation_untitled__" ? "none" : "";
 
       const categoryLabelEl = document.getElementById("active-user-votes-category");
       if (categoryLabelEl) {
@@ -1639,36 +1648,64 @@
     });
   }
 
-  // --- Untitled Images Curation (Exclusive for user 'lele') ---
+  // --- Image Bank (Exclusive for user 'lele') ---
+  // Todas as imagens do sistema (cards + itens de tier list). As sem título
+  // aparecem também na seção expansível de curadoria.
+  let bankItems = [];
+  let bankItemsCache = null; // { at, items }
+  const BANK_CACHE_MS = 20000;
   let cachedUntitledItems = [];
+  let bankObserver = null;
 
-  async function fetchAllUntitledItems() {
-    const untitledList = [];
-    const seenSrc = new Set();
+  function isUntitledTitle(title) {
+    const t = (title || "").trim().toLowerCase();
+    return !t ||
+      t.startsWith("image.") ||
+      t.startsWith("image_") ||
+      t === "item sem título" ||
+      t === "sem titulo" ||
+      t === "sem título";
+  }
 
-    // 1. Check cards in memory
+  function normalizeSearch(str) {
+    return (str || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  }
+
+  function describeCardGallery(cardId) {
+    const cid = cardId || "";
+    if (cid.startsWith("anime_")) return "Anime (lele)";
+    if (cid.startsWith("filmes_")) return "Filmes (lele)";
+    const m = /^u_(.+?)__(.+?)_[a-z0-9]+$/i.exec(cid);
+    if (cid.startsWith("u_") && m) return `${m[2]} (${m[1]})`;
+    return "Games (lele)";
+  }
+
+  async function fetchAllBankItems(force = false) {
+    if (!force && bankItemsCache && Date.now() - bankItemsCache.at < BANK_CACHE_MS) {
+      return bankItemsCache.items;
+    }
+
+    const items = [];
+    const cardEntryById = new Map();
+    const entryBySrc = new Map();
+
+    // 1. Cards in memory
     cards.forEach(card => {
-      const t = (card.title || "").trim().toLowerCase();
-      const isUntitled = !t || 
-        t.startsWith("image.") || 
-        t.startsWith("image_") || 
-        t === "item sem título" || 
-        t === "sem titulo" ||
-        t === "sem título";
-
-      if (isUntitled) {
-        untitledList.push({
-          type: "card",
-          cardId: card.id,
-          src: card.imageDataUrl || imageCache[card.id] || null,
-          title: card.title || "",
-          sourceDesc: `Card na Galeria (${card.id})`
-        });
-        if (card.imageDataUrl) seenSrc.add(card.imageDataUrl);
-      }
+      const src = card.imageDataUrl || imageCache[card.id] || null;
+      const entry = {
+        type: "card",
+        cardId: card.id,
+        src: (src && src !== "none") ? src : null,
+        title: card.title || "",
+        sourceDesc: `Card na Galeria (${card.id})`,
+        galleryLabel: describeCardGallery(card.id)
+      };
+      items.push(entry);
+      cardEntryById.set(card.id, entry);
+      if (entry.src) entryBySrc.set(entry.src, entry);
     });
 
-    // 2. Check tier lists from Supabase
+    // 2. Tier lists from Supabase
     try {
       const { data: tls, error } = await supabase.from("tier_lists").select("id, title, tiers, bank, row_metadata");
       if (!error && Array.isArray(tls)) {
@@ -1678,74 +1715,185 @@
 
           allItems.forEach(item => {
             if (!item || !item.src) return;
-            const t = (item.title || "").trim().toLowerCase();
-            const isUntitled = !t || t.startsWith("image.") || t.startsWith("image_") || t === "item sem título" || t === "sem titulo" || t === "sem título";
+            const ref = { tlId: tl.id, tlTitle: tl.title, itemId: item.id };
 
-            if (isUntitled) {
-              const existing = untitledList.find(u => u.src === item.src);
-              if (existing) {
-                if (!existing.tierListRefs) existing.tierListRefs = [];
-                if (!existing.tierListRefs.some(r => r.tlId === tl.id)) {
-                  existing.tierListRefs.push({ tlId: tl.id, tlTitle: tl.title, itemId: item.id });
-                }
-              } else {
-                seenSrc.add(item.src);
-                untitledList.push({
-                  type: "tier_item",
-                  src: item.src,
-                  title: item.title || "",
-                  sourceDesc: `Tier List: "${tl.title}"`,
-                  tierListRefs: [{ tlId: tl.id, tlTitle: tl.title, itemId: item.id }]
-                });
+            // Item importado de um card: agrupa no mesmo registro do card
+            const fromCard = (item.id || "").startsWith("item-") ? cardEntryById.get(item.id.slice(5)) : null;
+            const existing = fromCard || entryBySrc.get(item.src);
+
+            if (existing) {
+              if (!existing.src) {
+                existing.src = item.src;
+                entryBySrc.set(item.src, existing);
               }
+              if (isUntitledTitle(existing.title) && !isUntitledTitle(item.title)) {
+                existing.title = item.title;
+              }
+              if (!existing.tierListRefs) existing.tierListRefs = [];
+              if (!existing.tierListRefs.some(r => r.tlId === tl.id && r.itemId === item.id)) {
+                existing.tierListRefs.push(ref);
+              }
+              return;
             }
+
+            const entry = {
+              type: "tier_item",
+              src: item.src,
+              title: item.title || "",
+              sourceDesc: `Tier List: "${tl.title}"`,
+              tierListRefs: [ref]
+            };
+            items.push(entry);
+            entryBySrc.set(item.src, entry);
           });
         });
       }
     } catch (e) {
-      console.warn("Erro ao buscar itens de tier list sem título:", e);
+      console.warn("Erro ao buscar itens de tier list para o banco de imagens:", e);
     }
 
-    return untitledList;
+    bankItemsCache = { at: Date.now(), items };
+    return items;
   }
 
-  let cachedUntitledCount = null;
+  function updateBankBadges() {
+    const total = bankItems.length;
+    const untitled = bankItems.filter(i => isUntitledTitle(i.title)).length;
+    const tabBadge = document.getElementById("bank-tab-badge");
+    if (tabBadge) tabBadge.textContent = total;
+    if (untitledExpanderBadge) {
+      untitledExpanderBadge.textContent = untitled;
+      untitledExpanderBadge.style.display = untitled > 0 ? "inline-block" : "none";
+    }
+  }
 
   async function updateUntitledCountBadge() {
     try {
-      const list = await fetchAllUntitledItems();
-      cachedUntitledCount = list.length;
-      const badge = document.getElementById("untitled-curation-tab-badge");
-      if (badge) {
-        badge.textContent = cachedUntitledCount;
-        badge.style.display = cachedUntitledCount > 0 ? "inline-block" : "none";
-      }
+      bankItems = await fetchAllBankItems();
+      updateBankBadges();
     } catch (e) {
-      const badge = document.getElementById("untitled-curation-tab-badge");
-      if (badge) badge.textContent = "0";
+      const tabBadge = document.getElementById("bank-tab-badge");
+      if (tabBadge) tabBadge.textContent = "0";
     }
   }
 
-  async function loadAndRenderUntitledCuration() {
+  function bankTileSourceText(item) {
+    const parts = [];
+    if (item.galleryLabel) parts.push(item.galleryLabel);
+    if (item.tierListRefs && item.tierListRefs.length === 1) {
+      parts.push(`Tier List: ${item.tierListRefs[0].tlTitle}`);
+    } else if (item.tierListRefs && item.tierListRefs.length > 1) {
+      parts.push(`${item.tierListRefs.length} Tabuleiros`);
+    }
+    return parts.join(" • ") || item.sourceDesc || "";
+  }
+
+  function renderBankGrid() {
+    if (!bankImagesGrid) return;
+    if (bankObserver) {
+      bankObserver.disconnect();
+      bankObserver = null;
+    }
+    bankImagesGrid.innerHTML = "";
+
+    const query = normalizeSearch(bankSearchInput ? bankSearchInput.value.trim() : "");
+    const filtered = bankItems.filter(item => {
+      if (!query) return true;
+      return normalizeSearch(item.title).includes(query);
+    });
+
+    // Com título em ordem alfabética; sem título ao final
+    filtered.sort((a, b) => {
+      const au = isUntitledTitle(a.title), bu = isUntitledTitle(b.title);
+      if (au !== bu) return au ? 1 : -1;
+      return (a.title || "").localeCompare(b.title || "", "pt-BR");
+    });
+
+    if (bankCountEl) {
+      bankCountEl.textContent = query
+        ? `${filtered.length} de ${bankItems.length} imagens`
+        : `${bankItems.length} ${bankItems.length === 1 ? "imagem" : "imagens"}`;
+    }
+    if (bankEmptyMsg) bankEmptyMsg.style.display = filtered.length === 0 ? "block" : "none";
+
+    if ("IntersectionObserver" in window) {
+      bankObserver = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+          if (!entry.isIntersecting) return;
+          bankObserver.unobserve(entry.target);
+          if (entry.target._loadImage) entry.target._loadImage();
+        });
+      }, { rootMargin: "300px 0px", threshold: 0.01 });
+    }
+
+    filtered.forEach(item => {
+      const untitled = isUntitledTitle(item.title);
+      const tile = document.createElement("div");
+      tile.className = "bank-tile";
+      tile.title = untitled ? "Sem título" : item.title;
+
+      const imgWrap = document.createElement("div");
+      imgWrap.className = "bank-tile__img";
+      const img = document.createElement("img");
+      img.alt = item.title || "Imagem sem título";
+      img.loading = "lazy";
+      imgWrap.appendChild(img);
+
+      const titleEl = document.createElement("div");
+      titleEl.className = "bank-tile__title" + (untitled ? " bank-tile__title--untitled" : "");
+      titleEl.textContent = untitled ? "Sem título" : item.title;
+
+      const sourceEl = document.createElement("div");
+      sourceEl.className = "bank-tile__source";
+      sourceEl.textContent = bankTileSourceText(item);
+
+      tile.appendChild(imgWrap);
+      tile.appendChild(titleEl);
+      tile.appendChild(sourceEl);
+      bankImagesGrid.appendChild(tile);
+
+      if (item.src) {
+        img.src = item.src;
+      } else if (item.cardId) {
+        // Imagem do card é baixada só quando o item aparece na tela
+        tile._loadImage = () => {
+          fetchCardImage(item.cardId).then(src => {
+            if (src && src !== "none") {
+              img.src = src;
+              item.src = src;
+            }
+          });
+        };
+        if (bankObserver) bankObserver.observe(tile);
+        else tile._loadImage();
+      }
+    });
+  }
+
+  if (bankSearchInput) {
+    let bankSearchTimer = null;
+    bankSearchInput.addEventListener("input", () => {
+      clearTimeout(bankSearchTimer);
+      bankSearchTimer = setTimeout(renderBankGrid, 150);
+    });
+  }
+
+  async function loadAndRenderUntitledCuration(force = false) {
     if (!curationImagesGrid) return;
     curationImagesGrid.innerHTML = `
       <div style="grid-column: 1 / -1; text-align: center; padding: 3rem 1rem; color: var(--text-muted);">
         <p style="font-size: 1.1rem; margin-bottom: 0.5rem;">🔍 Varrendo banco de dados e tabuleiros...</p>
-        <span style="font-size: 0.85rem;">Localizando imagens sem título ou com nomes genéricos</span>
+        <span style="font-size: 0.85rem;">Localizando imagens do sistema</span>
       </div>
     `;
     if (curationEmptyMsg) curationEmptyMsg.style.display = "none";
+    if (bankImagesGrid) bankImagesGrid.innerHTML = "";
 
-    const items = await fetchAllUntitledItems();
+    bankItems = await fetchAllBankItems(force);
+    const items = bankItems.filter(i => isUntitledTitle(i.title));
     cachedUntitledItems = items;
-    cachedUntitledCount = items.length;
-
-    // Update tab badge
-    const badge = document.getElementById("untitled-curation-tab-badge");
-    if (badge) {
-      badge.textContent = cachedUntitledCount;
-      badge.style.display = cachedUntitledCount > 0 ? "inline-block" : "none";
-    }
+    updateBankBadges();
+    renderBankGrid();
 
     curationImagesGrid.innerHTML = "";
     if (items.length === 0) {
@@ -1885,19 +2033,14 @@
 
           setTimeout(() => {
             cardEl.remove();
-            cachedUntitledItems = cachedUntitledItems.filter((_, i) => i !== index);
-            if (cachedUntitledCount !== null) {
-              cachedUntitledCount = Math.max(0, cachedUntitledCount - 1);
-            }
-            const badge = document.getElementById("untitled-curation-tab-badge");
-            if (badge && cachedUntitledCount !== null) {
-              badge.textContent = cachedUntitledCount;
-              badge.style.display = cachedUntitledCount > 0 ? "inline-block" : "none";
-            }
-            const remaining = curationImagesGrid.querySelectorAll(".curation-card").length;
-            if (remaining === 0 && curationEmptyMsg) {
+            bankItems = bankItems.filter(x => x !== item);
+            cachedUntitledItems = cachedUntitledItems.filter(x => x !== item);
+            bankItemsCache = null;
+            updateBankBadges();
+            if (curationImagesGrid.querySelectorAll(".curation-card").length === 0 && curationEmptyMsg) {
               curationEmptyMsg.style.display = "block";
             }
+            renderBankGrid();
           }, 350);
 
         } catch (err) {
@@ -2004,19 +2147,15 @@
             cardEl.style.transform = "scale(0.8)";
             setTimeout(() => {
               cardEl.remove();
-              cachedUntitledItems = cachedUntitledItems.filter((_, i) => i !== index);
-              if (cachedUntitledCount !== null) {
-                cachedUntitledCount = Math.max(0, cachedUntitledCount - 1);
-              }
-              const badge = document.getElementById("untitled-curation-tab-badge");
-              if (badge && cachedUntitledCount !== null) {
-                badge.textContent = cachedUntitledCount;
-                badge.style.display = cachedUntitledCount > 0 ? "inline-block" : "none";
-              }
-              const remaining = curationImagesGrid.querySelectorAll(".curation-card").length;
-              if (remaining === 0 && curationEmptyMsg) {
+              // O item continua no banco, agora com título
+              item.title = newTitle;
+              cachedUntitledItems = cachedUntitledItems.filter(x => x !== item);
+              bankItemsCache = null;
+              updateBankBadges();
+              if (curationImagesGrid.querySelectorAll(".curation-card").length === 0 && curationEmptyMsg) {
                 curationEmptyMsg.style.display = "block";
               }
+              renderBankGrid();
             }, 300);
           }, 800);
 
@@ -2049,7 +2188,7 @@
 
   if (refreshCurationBtn) {
     refreshCurationBtn.addEventListener("click", () => {
-      loadAndRenderUntitledCuration();
+      loadAndRenderUntitledCuration(true);
     });
   }
 

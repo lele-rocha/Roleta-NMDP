@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Roleta NMDP - Galeria de Votos</title>
-  <link rel="stylesheet" href="style.css?v=34">
+  <link rel="stylesheet" href="style.css?v=35">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700;800&family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
@@ -123,25 +123,43 @@
           <div id="cards-container" class="cards-grid"></div>
         </div>
 
-        <!-- Untitled Images Curation Section (Exclusive for user 'lele') -->
+        <!-- Image Bank Section (Exclusive for user lele) -->
         <div id="untitled-curation-section" style="display: none; flex-direction: column; gap: 1.25rem; margin-top: 1rem;">
-          <div style="background: rgba(255, 165, 0, 0.06); border: 1px solid rgba(255, 165, 0, 0.35); border-radius: 12px; padding: 1.25rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+          <div class="bank-header">
             <div>
-              <h3 style="margin: 0 0 0.4rem 0; color: #ff9f43; font-size: 1.15rem; display: flex; align-items: center; gap: 0.5rem;">
-                🏷️ Curadoria de Imagens Sem Título (Modo Admin: lele)
-              </h3>
-              <p style="margin: 0; color: var(--text-muted); font-size: 0.85rem; max-width: 650px;">
-                Estas imagens estão no sistema sem um título apropriado (ou com nome genérico). Digite o título correspondente e salve para associá-las e disponibilizá-las no autocomplete de todo o site, evitando duplicação!
+              <h3 class="bank-header__title">🖼️ Banco de Imagens (Modo Admin: lele)</h3>
+              <p class="bank-header__desc">
+                Todas as imagens do sistema: cards das galerias e itens dos tabuleiros da Tier List. Use o filtro para buscar por título.
               </p>
             </div>
             <button type="button" id="refresh-curation-btn" class="btn-secondary" style="font-size: 0.85rem; padding: 0.5rem 0.85rem;">
               🔄 Atualizar Lista
             </button>
           </div>
-          <p id="curation-empty-msg" class="cards-empty-msg" style="display: none;">
-            🎉 Incrível! Todas as imagens cadastradas no sistema já possuem títulos devidamente atribuídos!
-          </p>
-          <div id="curation-images-grid" class="cards-grid"></div>
+
+          <details id="untitled-expander" class="bank-expander">
+            <summary class="bank-expander__summary">
+              <span>🏷️ Imagens com títulos não alocados</span>
+              <span id="untitled-expander-badge" class="bank-expander__badge">0</span>
+              <span class="bank-expander__chevron">▼</span>
+            </summary>
+            <div class="bank-expander__body">
+              <p class="bank-expander__desc">
+                Estas imagens estão no sistema sem um título apropriado (ou com nome genérico). Digite o título correspondente e salve para associá-las e disponibilizá-las no autocomplete de todo o site, evitando duplicação!
+              </p>
+              <p id="curation-empty-msg" class="cards-empty-msg" style="display: none;">
+                🎉 Incrível! Todas as imagens cadastradas no sistema já possuem títulos devidamente atribuídos!
+              </p>
+              <div id="curation-images-grid" class="cards-grid"></div>
+            </div>
+          </details>
+
+          <div class="bank-filter-row">
+            <input type="text" id="bank-search-input" class="input-text bank-search-input" placeholder="🔍 Filtrar imagens por título..." autocomplete="off" />
+            <span id="bank-count" class="bank-count"></span>
+          </div>
+          <p id="bank-empty-msg" class="cards-empty-msg" style="display: none;">Nenhuma imagem encontrada para esse filtro.</p>
+          <div id="bank-images-grid" class="bank-grid"></div>
         </div>
       </section>
     </main>
@@ -219,6 +237,6 @@
   <script src="config.js?v=32"></script>
   <script src="users-panel.js?v=1"></script>
   <script src="ambient-bg.js?v=32"></script>
-  <script src="voting.js?v=33"></script>
+  <script src="voting.js?v=34"></script>
 </body>
 </html>
