@@ -74,6 +74,8 @@
   const setupImportCategory = document.getElementById("setup-import-category");
   const setupImportVotes = document.getElementById("setup-import-votes");
   const startCreationBtn = document.getElementById("start-creation-btn");
+  const setupCopySelect = document.getElementById("setup-copy-select");
+  const setupCopyHint = document.getElementById("setup-copy-hint");
 
   const setupParamInput = document.getElementById("setup-param-input");
   const addSetupParamBtn = document.getElementById("add-setup-param-btn");
@@ -3492,6 +3494,8 @@
 
       if (error) throw error;
 
+      populateCopySelect(data || []);
+
       if (!data || data.length === 0) {
         if (featuredBoardsList) {
           featuredBoardsList.innerHTML = `<p style="color: var(--text-muted); font-size: 0.85rem; text-align: center; padding: 1rem 0;">Nenhum tabuleiro em destaque no momento.</p>`;
@@ -4324,8 +4328,136 @@ CREATE POLICY "Allow delete" ON public.tier_lists FOR DELETE USING (true);</pre>
     }
   });
 
+  // --- Copiar uma tier list existente ao criar ---
+  let lastAutoCopyTitle = "";
+
+  function populateCopySelect(boards) {
+    if (!setupCopySelect) return;
+    const previous = setupCopySelect.value;
+    setupCopySelect.innerHTML = "";
+    const none = document.createElement("option");
+    none.value = "";
+    none.textContent = "Não copiar: começar do zero";
+    setupCopySelect.appendChild(none);
+
+    boards.forEach(b => {
+      const opt = document.createElement("option");
+      opt.value = b.id;
+      const kind = getBoardTypeFromMeta(b.row_metadata) === "list" ? "Listagem" : "Com Notas";
+      opt.textContent = `${b.title || "Sem Título"} (${b.created_by || "Anônimo"} • ${kind})`;
+      opt.dataset.title = b.title || "";
+      setupCopySelect.appendChild(opt);
+    });
+
+    if (previous && boards.some(b => b.id === previous)) setupCopySelect.value = previous;
+  }
+
+  function updateCopyUI() {
+    if (!setupCopySelect) return;
+    const copying = !!setupCopySelect.value;
+    if (setupCopyHint) setupCopyHint.style.display = copying ? "block" : "none";
+
+    // Ao copiar, tipo, linhas, parâmetros e importação da galeria vêm do tabuleiro de origem
+    ["setup-type-group", "setup-template-group", "setup-params-group"].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) {
+        el.style.opacity = copying ? "0.4" : "";
+        el.style.pointerEvents = copying ? "none" : "";
+      }
+    });
+    if (setupImportCheckbox) {
+      setupImportCheckbox.disabled = copying;
+      if (copying) {
+        setupImportCheckbox.checked = false;
+        if (setupImportOptions) setupImportOptions.style.display = "none";
+      }
+    }
+
+    // Sugere o título da cópia sem sobrescrever o que a pessoa digitou
+    if (copying) {
+      const opt = setupCopySelect.options[setupCopySelect.selectedIndex];
+      const suggested = `${opt.dataset.title || "Tier List"} (cópia)`;
+      const current = setupTitleInput.value.trim();
+      if (!current || current === "Minha Tier List" || current === lastAutoCopyTitle) {
+        setupTitleInput.value = suggested;
+        lastAutoCopyTitle = suggested;
+      }
+    } else if (setupTitleInput.value.trim() === lastAutoCopyTitle && lastAutoCopyTitle) {
+      setupTitleInput.value = "Minha Tier List";
+      lastAutoCopyTitle = "";
+    }
+  }
+
+  if (setupCopySelect) {
+    setupCopySelect.addEventListener("change", updateCopyUI);
+  }
+
+  // Aplica o conteúdo (linhas, tipo, imagens) do tabuleiro de origem ao novo tabuleiro
+  function applyCopiedBoard(source) {
+    activeBoardType = getBoardTypeFromMeta(source.row_metadata);
+    const meta = Array.isArray(source.row_metadata) ? source.row_metadata : [];
+    const paramMeta = meta.find(m => m && Array.isArray(m.parameters));
+    activeBoardParameters = (!isListBoard() && paramMeta) ? [...paramMeta.parameters] : [];
+
+    tiersData = JSON.parse(JSON.stringify(source.tiers || []));
+    tiersData.forEach(tier => {
+      if (typeof tier.minScore !== "number") {
+        const metaTier = meta.find(m => m && m.name === tier.name && typeof m.minScore === "number");
+        if (metaTier) tier.minScore = metaTier.minScore;
+      }
+    });
+    bankData = JSON.parse(JSON.stringify(source.bank || []));
+
+    if (!isListBoard()) {
+      // Sem notas copiadas, todas as imagens voltam para o banco para serem avaliadas de novo
+      const unvoted = (meta.find(m => m && Array.isArray(m.unvoted_bank)) || {}).unvoted_bank || [];
+      tiersData.forEach(tier => {
+        bankData.push(...(tier.items || []));
+        tier.items = [];
+      });
+      bankData.push(...JSON.parse(JSON.stringify(unvoted)));
+    }
+
+    // Remove repetidos (mesmo id) que possam ter vindo do tabuleiro de origem
+    const seen = new Set();
+    const keep = (it) => {
+      if (!it || !it.src) return false;
+      const key = it.id || it.src;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    };
+    tiersData.forEach(tier => { tier.items = (tier.items || []).filter(keep); });
+    bankData = bankData.filter(keep);
+  }
+
   startCreationBtn.addEventListener("click", async () => {
-    boardTitle = setupTitleInput.value.trim() || "Minha Tier List";
+    // Busca o tabuleiro de origem antes de mexer em qualquer estado
+    const copyId = setupCopySelect ? setupCopySelect.value : "";
+    let copiedSource = null;
+    if (copyId) {
+      startCreationBtn.disabled = true;
+      startCreationBtn.textContent = "Copiando tabuleiro...";
+      try {
+        const { data, error } = await supabase
+          .from("tier_lists")
+          .select("title, tiers, bank, row_metadata")
+          .eq("id", copyId)
+          .single();
+        if (error) throw error;
+        copiedSource = data;
+      } catch (err) {
+        console.error("Erro ao copiar tabuleiro:", err);
+        alert("Não foi possível copiar o tabuleiro escolhido: " + (err.message || err));
+        startCreationBtn.disabled = false;
+        startCreationBtn.textContent = "🚀 Começar a Criar";
+        return;
+      }
+      startCreationBtn.disabled = false;
+      startCreationBtn.textContent = "🚀 Começar a Criar";
+    }
+
+    boardTitle = setupTitleInput.value.trim() || (copiedSource ? `${copiedSource.title || "Tier List"} (cópia)` : "Minha Tier List");
     activeTierlistTitle.textContent = boardTitle;
 
     // A fresh board creation reset
@@ -4347,8 +4479,10 @@ CREATE POLICY "Allow delete" ON public.tier_lists FOR DELETE USING (true);</pre>
       tiersData = JSON.parse(JSON.stringify(DEFAULT_TIERS));
     }
 
+    if (copiedSource) applyCopiedBoard(copiedSource);
+
     // Pre-import gallery images
-    if (setupImportCheckbox.checked) {
+    if (!copiedSource && setupImportCheckbox.checked) {
       const category = setupImportCategory.value;
       const votesFilter = setupImportVotes.value;
 
@@ -4389,7 +4523,7 @@ CREATE POLICY "Allow delete" ON public.tier_lists FOR DELETE USING (true);</pre>
 
       startCreationBtn.disabled = false;
       startCreationBtn.textContent = "🚀 Começar a Criar";
-    } else {
+    } else if (!copiedSource) {
       bankData = [];
     }
 
@@ -4435,6 +4569,11 @@ CREATE POLICY "Allow delete" ON public.tier_lists FOR DELETE USING (true);</pre>
       if (setupTitleInput) setupTitleInput.value = "Minha Tier List";
       if (setupImportCheckbox) setupImportCheckbox.checked = false;
       if (setupImportOptions) setupImportOptions.style.display = "none";
+      if (setupCopySelect) {
+        setupCopySelect.value = "";
+        lastAutoCopyTitle = "";
+        updateCopyUI();
+      }
       renderSetupParams();
       
       // Reset collapse state

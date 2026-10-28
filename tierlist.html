@@ -60,7 +60,17 @@
               <input type="text" id="setup-title-input" class="input-text" placeholder="Ex: Minha Tier List de Jogos" value="Minha Tier List" />
             </div>
 
-            <div class="setting-group" style="margin-bottom: 1.25rem;">
+            <div class="setting-group" id="setup-copy-group" style="margin-bottom: 1.25rem;">
+              <label class="label" for="setup-copy-select">Copiar uma Tier List existente (opcional)</label>
+              <select id="setup-copy-select" class="input-text" style="width: 100%; padding: 0.55rem 0.75rem; background: var(--surface); border: 1px solid var(--border); color: var(--text); border-radius: 8px; font-size: 0.9rem;">
+                <option value="">Não copiar: começar do zero</option>
+              </select>
+              <p id="setup-copy-hint" style="display: none; margin: 0.5rem 0 0; font-size: 0.78rem; color: var(--text-muted);">
+                O tipo, as linhas e as imagens serão copiados para o seu novo tabuleiro. Notas e votos não são copiados.
+              </p>
+            </div>
+
+            <div class="setting-group" id="setup-type-group" style="margin-bottom: 1.25rem;">
               <label class="label">Tipo de Tier List</label>
               <div style="display: flex; gap: 0.75rem; margin-top: 0.35rem;">
                 <label style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.2rem; padding: 0.75rem; background: var(--surface-raised); border: 1px solid var(--border); border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 0.95rem; text-align: center;">
@@ -74,7 +84,7 @@
               </div>
             </div>
 
-            <div class="setting-group" style="margin-bottom: 1.25rem;">
+            <div class="setting-group" id="setup-template-group" style="margin-bottom: 1.25rem;">
               <label class="label">Modelo Inicial de Linhas</label>
               <div style="display: flex; gap: 0.75rem; margin-top: 0.35rem;">
                 <label style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 0.5rem; padding: 0.75rem; background: var(--surface-raised); border: 1px solid var(--border); border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 0.95rem; text-align: center;">
@@ -485,6 +495,6 @@
   <script src="config.js?v=33"></script>
   <script src="users-panel.js?v=1"></script>
   <script src="ambient-bg.js?v=33"></script>
-  <script src="tierlist.js?v=37"></script>
+  <script src="tierlist.js?v=38"></script>
 </body>
 </html>
