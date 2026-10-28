@@ -282,6 +282,25 @@
         <div class="color-presets-grid" id="color-presets-grid">
           <!-- Populated by JS -->
         </div>
+
+        <div style="display: flex; gap: 1rem; align-items: center; margin-top: 0.85rem;">
+          <canvas id="color-wheel-canvas" width="150" height="150" style="width: 150px; height: 150px; border-radius: 50%; cursor: crosshair; flex-shrink: 0; touch-action: none;" title="Clique ou arraste para escolher a cor"></canvas>
+          <div style="flex: 1; display: flex; flex-direction: column; gap: 0.5rem;">
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+              <div id="color-wheel-preview" style="width: 36px; height: 36px; border-radius: 8px; border: 1px solid var(--border); background: #95a5a6;"></div>
+              <span id="color-wheel-hex" style="font-family: monospace; font-weight: 700; font-size: 0.9rem;">#95a5a6</span>
+            </div>
+            <label style="font-size: 0.75rem; color: var(--text-muted);">Brilho</label>
+            <input type="range" id="color-wheel-brightness" min="20" max="100" value="100" style="width: 100%; accent-color: var(--accent);" />
+          </div>
+        </div>
+
+        <div style="margin-top: 0.85rem;">
+          <label class="label" style="font-size: 0.8rem;">Últimas cores usadas</label>
+          <div id="recent-colors-grid" style="display: flex; gap: 0.5rem; min-height: 28px; align-items: center;">
+            <!-- Populated by JS -->
+          </div>
+        </div>
       </div>
 
       <div class="edit-modal__actions" style="margin-top: 1.5rem; display: flex; gap: 0.75rem; justify-content: flex-end;">
@@ -448,6 +467,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js?v=33"></script>
   <script src="ambient-bg.js?v=33"></script>
-  <script src="tierlist.js?v=34"></script>
+  <script src="tierlist.js?v=35"></script>
 </body>
 </html>

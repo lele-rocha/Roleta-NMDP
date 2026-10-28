@@ -1809,9 +1809,178 @@
         presetsGrid.querySelectorAll(".color-box").forEach(b => b.classList.remove("selected"));
         box.classList.add("selected");
         selectedPresetColor = color.hex;
+        syncColorWheel();
       });
 
       presetsGrid.appendChild(box);
+    });
+    renderRecentColors();
+    syncColorWheel();
+  }
+
+  // --- Color wheel + recently used colors ---
+  const RECENT_COLORS_KEY = "roleta-nmdp-recent-row-colors";
+  const wheelCanvas = document.getElementById("color-wheel-canvas");
+  const wheelPreview = document.getElementById("color-wheel-preview");
+  const wheelHexLabel = document.getElementById("color-wheel-hex");
+  const wheelBrightness = document.getElementById("color-wheel-brightness");
+  const recentColorsGrid = document.getElementById("recent-colors-grid");
+  let wheelHSV = { h: 0, s: 0, v: 1 };
+
+  function hsvToHex(h, s, v) {
+    const f = (n) => {
+      const k = (n + h / 60) % 6;
+      return v - v * s * Math.max(0, Math.min(k, 4 - k, 1));
+    };
+    const toHex = (x) => Math.round(x * 255).toString(16).padStart(2, "0");
+    return `#${toHex(f(5))}${toHex(f(3))}${toHex(f(1))}`;
+  }
+
+  function hexToHsv(hex) {
+    const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex || "");
+    if (!m) return { h: 0, s: 0, v: 1 };
+    const r = parseInt(m[1], 16) / 255, g = parseInt(m[2], 16) / 255, b = parseInt(m[3], 16) / 255;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+    let h = 0;
+    if (d !== 0) {
+      if (max === r) h = ((g - b) / d) % 6;
+      else if (max === g) h = (b - r) / d + 2;
+      else h = (r - g) / d + 4;
+      h *= 60;
+      if (h < 0) h += 360;
+    }
+    return { h, s: max === 0 ? 0 : d / max, v: max };
+  }
+
+  function drawColorWheel() {
+    if (!wheelCanvas) return;
+    const ctx = wheelCanvas.getContext("2d");
+    const size = wheelCanvas.width, radius = size / 2;
+    const img = ctx.createImageData(size, size);
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const dx = x - radius + 0.5, dy = y - radius + 0.5;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const idx = (y * size + x) * 4;
+        if (dist > radius) { img.data[idx + 3] = 0; continue; }
+        let hue = Math.atan2(dy, dx) * 180 / Math.PI;
+        if (hue < 0) hue += 360;
+        const hex = hsvToHex(hue, dist / radius, wheelHSV.v);
+        img.data[idx] = parseInt(hex.slice(1, 3), 16);
+        img.data[idx + 1] = parseInt(hex.slice(3, 5), 16);
+        img.data[idx + 2] = parseInt(hex.slice(5, 7), 16);
+        img.data[idx + 3] = 255;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+
+    // Marker on the current hue/saturation
+    const ang = wheelHSV.h * Math.PI / 180;
+    const mx = radius + Math.cos(ang) * wheelHSV.s * radius;
+    const my = radius + Math.sin(ang) * wheelHSV.s * radius;
+    ctx.beginPath();
+    ctx.arc(mx, my, 6, 0, Math.PI * 2);
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = "#fff";
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(mx, my, 7.5, 0, Math.PI * 2);
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = "#000";
+    ctx.stroke();
+  }
+
+  function syncColorWheel() {
+    if (!wheelCanvas) return;
+    wheelHSV = hexToHsv(selectedPresetColor);
+    if (wheelBrightness) wheelBrightness.value = Math.max(20, Math.round(wheelHSV.v * 100));
+    if (wheelPreview) wheelPreview.style.backgroundColor = selectedPresetColor;
+    if (wheelHexLabel) wheelHexLabel.textContent = selectedPresetColor;
+    drawColorWheel();
+  }
+
+  function applyWheelColor() {
+    selectedPresetColor = hsvToHex(wheelHSV.h, wheelHSV.s, wheelHSV.v);
+    presetsGrid.querySelectorAll(".color-box").forEach(b => b.classList.remove("selected"));
+    if (wheelPreview) wheelPreview.style.backgroundColor = selectedPresetColor;
+    if (wheelHexLabel) wheelHexLabel.textContent = selectedPresetColor;
+    drawColorWheel();
+  }
+
+  function pickFromWheel(e) {
+    const rect = wheelCanvas.getBoundingClientRect();
+    const radius = rect.width / 2;
+    const dx = e.clientX - rect.left - radius, dy = e.clientY - rect.top - radius;
+    let hue = Math.atan2(dy, dx) * 180 / Math.PI;
+    if (hue < 0) hue += 360;
+    wheelHSV.h = hue;
+    wheelHSV.s = Math.min(1, Math.sqrt(dx * dx + dy * dy) / radius);
+    applyWheelColor();
+  }
+
+  if (wheelCanvas) {
+    let wheelDragging = false;
+    wheelCanvas.addEventListener("pointerdown", (e) => {
+      wheelDragging = true;
+      wheelCanvas.setPointerCapture(e.pointerId);
+      pickFromWheel(e);
+    });
+    wheelCanvas.addEventListener("pointermove", (e) => {
+      if (wheelDragging) pickFromWheel(e);
+    });
+    wheelCanvas.addEventListener("pointerup", () => { wheelDragging = false; });
+    wheelCanvas.addEventListener("pointercancel", () => { wheelDragging = false; });
+  }
+
+  if (wheelBrightness) {
+    wheelBrightness.addEventListener("input", () => {
+      wheelHSV.v = Number(wheelBrightness.value) / 100;
+      applyWheelColor();
+    });
+  }
+
+  function loadRecentColors() {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(RECENT_COLORS_KEY) || "[]");
+      return Array.isArray(parsed) ? parsed.filter(c => typeof c === "string").slice(0, 5) : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function rememberRecentColor(hex) {
+    if (!hex) return;
+    const recent = loadRecentColors().filter(c => c.toLowerCase() !== hex.toLowerCase());
+    recent.unshift(hex);
+    try {
+      localStorage.setItem(RECENT_COLORS_KEY, JSON.stringify(recent.slice(0, 5)));
+    } catch (e) {}
+  }
+
+  function renderRecentColors() {
+    if (!recentColorsGrid) return;
+    recentColorsGrid.innerHTML = "";
+    const recent = loadRecentColors();
+    if (recent.length === 0) {
+      const empty = document.createElement("span");
+      empty.style.fontSize = "0.75rem";
+      empty.style.color = "var(--text-muted)";
+      empty.style.fontStyle = "italic";
+      empty.textContent = "Nenhuma cor usada ainda.";
+      recentColorsGrid.appendChild(empty);
+      return;
+    }
+    recent.forEach(hex => {
+      const box = document.createElement("div");
+      box.className = "color-box";
+      box.style.backgroundColor = hex;
+      box.title = hex;
+      box.addEventListener("click", () => {
+        presetsGrid.querySelectorAll(".color-box").forEach(b => b.classList.remove("selected"));
+        selectedPresetColor = hex;
+        syncColorWheel();
+      });
+      recentColorsGrid.appendChild(box);
     });
   }
 
@@ -1865,6 +2034,7 @@
     }
 
     const newTitle = rowLabelInput.value.trim() || "NEW";
+    rememberRecentColor(selectedPresetColor);
     if (tier) {
       tier.name = newTitle;
       tier.color = selectedPresetColor;
