@@ -60,12 +60,6 @@
   const importDataBtn = document.getElementById("import-data-btn");
   const importFileInput = document.getElementById("import-file-input");
 
-  // Users List elements
-  const toggleUsersListBtn = document.getElementById("toggle-users-list-btn");
-  const usersListDropdown = document.getElementById("users-list-dropdown");
-  const usersListContainer = document.getElementById("users-list-container");
-  const usersEmptyMsg = document.getElementById("users-empty-msg");
-
   // User Galleries Elements
   const galleryOwnerSelect = document.getElementById("gallery-owner-select");
   const galleryTabsContainer = document.getElementById("gallery-tabs-container");
@@ -389,80 +383,14 @@
     renderUsers();
   }
 
+  // A lista de usuários agora vive no painel global (users-panel.js).
+  // Aqui só publicamos a galeria ativa para o painel mostrar os votos dela.
   function renderUsers() {
-    usersListContainer.innerHTML = "";
-    if (users.length === 0) {
-      usersEmptyMsg.hidden = false;
-      return;
-    }
-    usersEmptyMsg.hidden = true;
-
-    // Sort users alphabetically
-    const sortedUsers = [...users].sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
-    const isAdmin = currentUsername && currentUsername.toLowerCase() === "lele";
-
-    sortedUsers.forEach((user) => {
-      const activeG = getActiveGallery();
-      const currentGalleryVotes = user.votedCardIds.filter(id => cardBelongsToGallery({ id }, activeG.owner, activeG.slug)).length;
-      const totalVotes = user.votedCardIds.length;
-      
-      const el = document.createElement("div");
-      el.className = "user-status-card";
-      if (currentUsername && user.name.toLowerCase() === currentUsername.toLowerCase()) {
-        el.classList.add("active-user-highlight");
-      }
-
-      const deleteBtnHtml = (isAdmin && user.name.toLowerCase() !== "lele")
-        ? `<button class="btn-delete-user" data-username="${escapeHtml(user.name)}" title="Excluir usuário e todos os seus votos">🗑️</button>`
-        : '';
-
-      el.innerHTML = `
-        ${deleteBtnHtml}
-        <span class="user-status-card__name">${escapeHtml(user.name)}</span>
-        <span class="user-status-card__votes" style="font-size: 0.75rem;">
-          Nesta galeria (${escapeHtml(activeG.name)}): <strong>${currentGalleryVotes}</strong>/20 | Total: <strong>${totalVotes}</strong> votos
-        </span>
-      `;
-      usersListContainer.appendChild(el);
-    });
-
-    // Attach click listeners for delete user buttons
-    if (isAdmin) {
-      usersListContainer.querySelectorAll(".btn-delete-user").forEach((btn) => {
-        btn.addEventListener("click", async (e) => {
-          e.stopPropagation();
-          const username = btn.dataset.username;
-          
-          const confirmDelete = confirm(`Tem certeza que deseja excluir o usuário ${username} e todos os seus votos permanentemente?`);
-          if (!confirmDelete) return;
-
-          const user = users.find(u => u.name.toLowerCase() === username.toLowerCase());
-          if (user) {
-            try {
-              // 1. Decrement votes on all cards the user voted for
-              for (const cardId of user.votedCardIds) {
-                const card = cards.find(c => c.id === cardId);
-                if (card && card.votes > 0) {
-                  card.votes--;
-                  await supabase.from("cards").update({ votes: card.votes }).eq("id", card.id);
-                }
-              }
-
-              // 2. Delete user from database
-              await supabase.from("users").delete().eq("name", user.name);
-
-              // Real-time will refresh everything, but we trigger a local update just in case
-              await loadUsers();
-              await loadCards();
-              renderCards();
-              updateUserBar();
-            } catch (err) {
-              console.error("Erro ao excluir usuário pelo admin:", err);
-            }
-          }
-        });
-      });
-    }
+    const g = getActiveGallery();
+    try {
+      localStorage.setItem("roleta-nmdp-panel-gallery", JSON.stringify({ owner: g.owner, slug: g.slug, name: g.name }));
+    } catch (e) {}
+    window.dispatchEvent(new CustomEvent("roleta:gallery"));
   }
 
   // --- Database Persistence ---
@@ -1241,12 +1169,6 @@
     const isHidden = votingControlsDropdown.hidden;
     votingControlsDropdown.hidden = !isHidden;
     toggleControlsBtn.classList.toggle("open", isHidden);
-  });
-
-  toggleUsersListBtn.addEventListener("click", () => {
-    const isHidden = usersListDropdown.hidden;
-    usersListDropdown.hidden = !isHidden;
-    toggleUsersListBtn.classList.toggle("open", isHidden);
   });
 
   // --- Edit Modal Handlers ---
