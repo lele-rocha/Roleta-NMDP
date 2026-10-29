@@ -3390,3 +3390,11 @@ html.page-entering-default .app > *:not(.top-nav) {
   content: " (já no tabuleiro)";
   font-weight: 400;
 }
+
+.tier-item-wrapper.dragging {
+  opacity: 0.4;
+}
+
+.tier-item-wrapper.dragging .tier-item-img {
+  transform: none;
+}

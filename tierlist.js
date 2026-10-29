@@ -1726,14 +1726,7 @@
       zone.classList.add("drag-over");
 
       // Implement inline sorting placement
-      if (draggedEl) {
-        const afterElement = getDragAfterElement(zone, e.clientX);
-        if (afterElement == null) {
-          zone.appendChild(draggedEl);
-        } else {
-          zone.insertBefore(draggedEl, afterElement);
-        }
-      }
+      if (draggedEl) placeDraggedInZone(zone, e.clientX, e.clientY);
     });
 
     zone.addEventListener("dragenter", (e) => {
@@ -1742,7 +1735,8 @@
       zone.classList.add("drag-over");
     });
 
-    zone.addEventListener("dragleave", () => {
+    zone.addEventListener("dragleave", (e) => {
+      if (e.relatedTarget && zone.contains(e.relatedTarget)) return;
       zone.classList.remove("drag-over");
     });
 
@@ -1751,14 +1745,7 @@
       zone.classList.remove("drag-over");
       if (!canUserArrangeActiveBoard()) return;
 
-      if (draggedEl) {
-        const afterElement = getDragAfterElement(zone, e.clientX);
-        if (afterElement == null) {
-          zone.appendChild(draggedEl);
-        } else {
-          zone.insertBefore(draggedEl, afterElement);
-        }
-      }
+      if (draggedEl) placeDraggedInZone(zone, e.clientX, e.clientY);
       saveBoardState();
 
       if (isListBoard()) {
@@ -1783,17 +1770,26 @@
     });
   }
 
-  function getDragAfterElement(container, x) {
-    const draggableElements = [...container.querySelectorAll(".tier-item-img:not(.dragging)")];
-    return draggableElements.reduce((closest, child) => {
+  // Acha o item (em ordem de leitura) que deve ficar logo depois do ponteiro.
+  // Considera linhas quebradas: itens de linhas abaixo do cursor vêm depois dele.
+  function getDragAfterElement(container, x, y) {
+    const items = [...container.children].filter(c => c.classList.contains("tier-item-wrapper") && c !== draggedEl);
+    for (const child of items) {
       const box = child.getBoundingClientRect();
-      const offset = x - box.left - box.width / 2;
-      if (offset < 0 && offset > closest.offset) {
-        return { offset: offset, element: child };
-      } else {
-        return closest;
-      }
-    }, { offset: Number.NEGATIVE_INFINITY }).element;
+      if (y < box.top) return child;
+      if (y <= box.bottom && x < box.left + box.width / 2) return child;
+    }
+    return null;
+  }
+
+  // Move o item arrastado só quando a posição realmente muda (evita tremedeira)
+  function placeDraggedInZone(zone, x, y) {
+    const after = getDragAfterElement(zone, x, y);
+    if (after == null) {
+      if (zone.lastElementChild !== draggedEl) zone.appendChild(draggedEl);
+    } else if (draggedEl.nextElementSibling !== after || draggedEl.parentElement !== zone) {
+      zone.insertBefore(draggedEl, after);
+    }
   }
 
   // --- Row Settings Management ---
