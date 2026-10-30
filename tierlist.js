@@ -587,6 +587,10 @@
 
   // --- Featured Ratings & Auto Re-Sorting System ---
   let activeBoardRatings = {}; // itemId -> Array of { userName, score }
+  // Notas removidas nesta sessão ("itemId|usuario"): impedem que a mesclagem com a versão
+  // antiga do banco (que ainda tem a nota) traga o voto de volta
+  const removedRatingKeys = new Set();
+  const ratingKey = (itemId, userName) => itemId + "|" + (userName || "").toLowerCase();
   let activeRatingItem = null;
 
   const inlineRatingCard = document.getElementById("inline-rating-card");
@@ -643,6 +647,7 @@
 
       if (!error && data && data.length > 0) {
         data.forEach(r => {
+          if (removedRatingKeys.has(ratingKey(r.item_id, r.user_name))) return;
           if (!activeBoardRatings[r.item_id]) activeBoardRatings[r.item_id] = [];
           const sessionUser = (r.user_name || "").toLowerCase();
           const existing = activeBoardRatings[r.item_id].find(x => (x.userName || "").toLowerCase() === sessionUser);
@@ -713,11 +718,13 @@
           let hasMergedNew = false;
           for (const [itemId, rList] of Object.entries(remoteRatingsObj.ratings)) {
             if (!Array.isArray(rList)) continue;
+            const keptList = rList.filter(r => !removedRatingKeys.has(ratingKey(itemId, r.userName)));
+            if (keptList.length === 0) continue;
             if (!activeBoardRatings[itemId]) {
-              activeBoardRatings[itemId] = JSON.parse(JSON.stringify(rList));
+              activeBoardRatings[itemId] = JSON.parse(JSON.stringify(keptList));
               hasMergedNew = true;
             } else {
-              rList.forEach(remR => {
+              keptList.forEach(remR => {
                 const remUser = (remR.userName || "").toLowerCase();
                 const localIdx = activeBoardRatings[itemId].findIndex(locR => (locR.userName || "").toLowerCase() === remUser);
                 if (localIdx === -1) {
@@ -754,6 +761,7 @@
       rList.forEach(r => {
         const uName = (r.userName || "").trim();
         const uLower = uName.toLowerCase();
+        if (removedRatingKeys.has(ratingKey(itemId, uName))) return;
         if (uLower === currentUser && isSavingLocal) return;
 
         const localIdx = activeBoardRatings[itemId].findIndex(loc => (loc.userName || "").toLowerCase() === uLower);
@@ -953,6 +961,8 @@
       updateUserSessionUI();
     }
 
+    removedRatingKeys.delete(ratingKey(itemId, sessionUser));
+
     // Always merge remote ratings first before computing averages and placing cards
     await mergeRemoteRatings();
 
@@ -1089,6 +1099,7 @@
     if (!confirmRemove) return;
 
     // 1. Remove from local memory activeBoardRatings
+    removedRatingKeys.add(ratingKey(itemId, targetUserName));
     if (activeBoardRatings[itemId]) {
       activeBoardRatings[itemId] = activeBoardRatings[itemId].filter(
         r => (r.userName || "").toLowerCase() !== targetUserName.toLowerCase()
