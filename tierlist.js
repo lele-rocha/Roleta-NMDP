@@ -2307,6 +2307,47 @@
     });
   }
 
+  // Janelinha para o usuário escolher o nome da imagem adicionada. Resolve com o nome ou null (cancelado).
+  function askImageName(src, defaultName) {
+    return new Promise((resolve) => {
+      const overlay = document.createElement("div");
+      overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;z-index:10000;";
+      const box = document.createElement("div");
+      box.style.cssText = "background:#14141f;border:1px solid #9d4edd;border-radius:12px;padding:20px;width:min(360px,90vw);display:flex;flex-direction:column;gap:12px;align-items:center;color:#fff;";
+      const preview = document.createElement("img");
+      preview.src = src;
+      preview.style.cssText = "max-width:100%;max-height:200px;border-radius:8px;object-fit:contain;";
+      const label = document.createElement("div");
+      label.textContent = "Nome da imagem:";
+      const input = document.createElement("input");
+      input.type = "text";
+      input.value = defaultName;
+      input.style.cssText = "width:100%;padding:8px 10px;border-radius:8px;border:1px solid #444;background:#0b0b14;color:#fff;box-sizing:border-box;";
+      const row = document.createElement("div");
+      row.style.cssText = "display:flex;gap:8px;width:100%;justify-content:flex-end;";
+      const cancel = document.createElement("button");
+      cancel.textContent = "Pular";
+      cancel.className = "btn btn-secondary";
+      const ok = document.createElement("button");
+      ok.textContent = "Adicionar";
+      ok.className = "btn btn-primary";
+      row.append(cancel, ok);
+      box.append(preview, label, input, row);
+      overlay.appendChild(box);
+      document.body.appendChild(overlay);
+      const done = (v) => { overlay.remove(); resolve(v); };
+      ok.addEventListener("click", () => done(input.value.trim() || defaultName));
+      cancel.addEventListener("click", () => done(null));
+      input.addEventListener("keydown", (e) => {
+        e.stopPropagation();
+        if (e.key === "Enter") ok.click();
+        else if (e.key === "Escape") cancel.click();
+      });
+      input.addEventListener("paste", (e) => e.stopPropagation());
+      setTimeout(() => { input.focus(); input.select(); }, 50);
+    });
+  }
+
   async function handleFilesUpload(files) {
     for (const file of files) {
       if (!file.type.startsWith("image/")) continue;
@@ -2316,6 +2357,9 @@
         if (!titleName || titleName.toLowerCase() === "image" || titleName.toLowerCase() === "blob") {
           titleName = "Novo Item";
         }
+        const chosen = await askImageName(webpSrc, titleName);
+        if (chosen === null) continue;
+        titleName = chosen;
         const item = {
           id: "item-" + Math.random().toString(36).slice(2, 9),
           src: webpSrc,

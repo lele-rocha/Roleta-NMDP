@@ -2087,9 +2087,9 @@ select {
 
 .tier-item-img {
   width: auto;
-  max-width: 120px;
+  max-width: 56px;
   height: 80px;
-  object-fit: contain;
+  object-fit: cover;
   border-radius: 6px;
   cursor: grab;
   user-select: none;
