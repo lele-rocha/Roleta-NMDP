@@ -147,6 +147,7 @@
   let selectedPresetColor = "";
 
   // Parameters State
+  let activeBoardHistory = []; // snapshots salvos manualmente: [{ id, name, savedAt, savedBy, tiers, bank, avgs }]
   let activeBoardParameters = [];
   let setupParameters = [];
   let editingModalParameters = [];
@@ -263,6 +264,8 @@
     const editParametersBtn = document.getElementById("edit-parameters-btn");
 
     if (saveBoardBtn) saveBoardBtn.style.display = canEdit ? "inline-block" : "none";
+    const saveHistoryBtn = document.getElementById("save-history-btn");
+    if (saveHistoryBtn) saveHistoryBtn.style.display = (canEdit && activeBoardId) ? "inline-block" : "none";
     if (addRowBtn) addRowBtn.style.display = canEdit ? "inline-block" : "none";
     if (resetTiersBtn) resetTiersBtn.style.display = canEdit ? "inline-block" : "none";
     if (clearItemsBtn) clearItemsBtn.style.display = canEdit ? "inline-block" : "none";
@@ -410,6 +413,7 @@
     state.activeBoardCreatedBy = activeBoardCreatedBy;
     state.activeBoardRatings = activeBoardRatings;
     state.activeBoardParameters = activeBoardParameters;
+    state.activeBoardHistory = activeBoardHistory;
 
     // Keep in-memory arrays strictly synchronized with DOM state
     tiersData = state.tiers;
@@ -440,6 +444,7 @@
         activeBoardCreatedBy = parsed.activeBoardCreatedBy || null;
         activeBoardRatings = parsed.activeBoardRatings || {};
         activeBoardParameters = parsed.activeBoardParameters || [];
+        activeBoardHistory = parsed.activeBoardHistory || [];
         return;
       } catch (e) {
         console.error("Erro ao ler estado do localStorage:", e);
@@ -450,6 +455,7 @@
     activeBoardCreatedBy = null;
     activeBoardRatings = {};
     activeBoardParameters = [];
+    activeBoardHistory = [];
     activeEditing = false;
     boardTitle = "Minha Tier List";
     tiersData = JSON.parse(JSON.stringify(DEFAULT_TIERS));
@@ -908,6 +914,8 @@
           });
         }
       }
+
+      if (activeBoardHistory.length > 0) row_metadata.push({ history: activeBoardHistory });
 
       const upsertPayload = {
         id: activeBoardId,
@@ -2269,6 +2277,224 @@
     saveBoardState();
   });
 
+  // --- Histórico do tabuleiro (snapshots salvos manualmente) ---
+
+  function buildHistorySnapshot(name) {
+    const avgs = {};
+    if (!isListBoard()) {
+      Object.keys(activeBoardRatings || {}).forEach(itemId => {
+        const s = getItemRatingStats(itemId);
+        if (s.count > 0) avgs[itemId] = s.avg;
+      });
+    }
+    return {
+      id: "h-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 6),
+      name: name,
+      savedAt: new Date().toISOString(),
+      savedBy: loadSessionUser() || "Anônimo",
+      tiers: tiersData.map(t => ({
+        name: t.name,
+        color: t.color,
+        items: (t.items || []).map(i => ({ id: i.id, title: i.title || "" }))
+      })),
+      bank: (bankData || []).map(i => ({ id: i.id, title: i.title || "" })),
+      avgs: avgs
+    };
+  }
+
+  // Grava só o histórico no Supabase, sem mexer no resto do tabuleiro
+  async function persistBoardHistory() {
+    const { data, error } = await supabase.from("tier_lists").select("row_metadata").eq("id", activeBoardId).single();
+    if (error) throw error;
+    const meta = (Array.isArray(data.row_metadata) ? data.row_metadata : []).filter(m => !(m && Array.isArray(m.history)));
+    if (activeBoardHistory.length > 0) meta.push({ history: activeBoardHistory });
+    const { error: upErr } = await supabase.from("tier_lists").update({ row_metadata: meta }).eq("id", activeBoardId);
+    if (upErr) throw upErr;
+  }
+
+  async function saveCurrentStateToHistory() {
+    if (!supabase || !activeBoardId) {
+      alert("Salve o tabuleiro primeiro para poder guardar o estado no histórico.");
+      return;
+    }
+    if (!canUserEditActiveBoard()) return;
+    saveBoardState(); // sincroniza tiersData/bankData com a tela
+    const stamp = new Date().toLocaleString("pt-BR");
+    const name = prompt("Nome para este registro do histórico (opcional):", stamp);
+    if (name === null) return;
+    const snap = buildHistorySnapshot(name.trim() || stamp);
+    activeBoardHistory.push(snap);
+    try {
+      await persistBoardHistory();
+      saveBoardState();
+      showAutoSaveToast("🕘 Estado salvo no histórico!");
+    } catch (err) {
+      activeBoardHistory = activeBoardHistory.filter(h => h.id !== snap.id);
+      console.error("Erro ao salvar histórico:", err);
+      alert("Não foi possível salvar no histórico: " + (err.message || err));
+    }
+  }
+
+  function historyImageLookup() {
+    const map = new Map();
+    [...tiersData.flatMap(t => t.items || []), ...bankData, ...unvotedBankData].forEach(i => {
+      if (i && i.id && i.src && !map.has(i.id)) map.set(i.id, i.src);
+    });
+    return map;
+  }
+
+  function closeHistoryModal() {
+    const el = document.getElementById("history-modal-overlay");
+    if (el) el.remove();
+  }
+
+  function openHistoryModal() {
+    closeHistoryModal();
+    const overlay = document.createElement("div");
+    overlay.id = "history-modal-overlay";
+    overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.75);display:flex;align-items:center;justify-content:center;z-index:10000;padding:1rem;";
+    const box = document.createElement("div");
+    box.style.cssText = "background:#14141f;border:1px solid #9d4edd;border-radius:12px;padding:1.25rem;width:min(1000px,100%);max-height:90vh;overflow:auto;color:#fff;display:flex;flex-direction:column;gap:0.9rem;";
+    overlay.appendChild(box);
+    overlay.addEventListener("click", (e) => { if (e.target === overlay) closeHistoryModal(); });
+    document.body.appendChild(overlay);
+    renderHistoryList(box);
+  }
+
+  function historyHeader(box, title, onBack) {
+    const head = document.createElement("div");
+    head.style.cssText = "display:flex;align-items:center;gap:0.6rem;justify-content:space-between;";
+    const h = document.createElement("h3");
+    h.textContent = title;
+    h.style.margin = "0";
+    const btns = document.createElement("div");
+    btns.style.cssText = "display:flex;gap:0.5rem;";
+    if (onBack) {
+      const back = document.createElement("button");
+      back.className = "btn-secondary-sm";
+      back.textContent = "⬅️ Voltar";
+      back.addEventListener("click", onBack);
+      btns.appendChild(back);
+    }
+    const close = document.createElement("button");
+    close.className = "btn-secondary-sm";
+    close.textContent = "✖ Fechar";
+    close.addEventListener("click", closeHistoryModal);
+    btns.appendChild(close);
+    head.append(h, btns);
+    box.appendChild(head);
+  }
+
+  function renderHistoryList(box) {
+    box.innerHTML = "";
+    historyHeader(box, `🕘 Histórico — ${boardTitle}`);
+    if (activeBoardHistory.length === 0) {
+      const p = document.createElement("p");
+      p.style.cssText = "color:var(--text-muted);text-align:center;padding:1.5rem 0;";
+      p.textContent = "Nenhum estado salvo ainda. Use \"Salvar no Histórico\" para guardar uma cópia do estado atual.";
+      box.appendChild(p);
+      return;
+    }
+    const canEdit = canUserEditActiveBoard();
+    [...activeBoardHistory].reverse().forEach(snap => {
+      const row = document.createElement("div");
+      row.style.cssText = "display:flex;align-items:center;justify-content:space-between;gap:0.75rem;padding:0.7rem 0.9rem;border:1px solid #333;border-radius:8px;background:rgba(255,255,255,0.03);";
+      const info = document.createElement("div");
+      const placed = snap.tiers.reduce((a, t) => a + t.items.length, 0);
+      const strong = document.createElement("strong");
+      strong.textContent = snap.name;
+      const small = document.createElement("div");
+      small.style.cssText = "font-size:0.8rem;color:var(--text-muted);";
+      small.textContent = `${new Date(snap.savedAt).toLocaleString("pt-BR")} • por ${snap.savedBy} • ${placed} itens nas tiers`;
+      info.append(strong, small);
+      const actions = document.createElement("div");
+      actions.style.cssText = "display:flex;gap:0.5rem;flex-shrink:0;";
+      const view = document.createElement("button");
+      view.className = "btn-primary-sm";
+      view.textContent = "👁️ Ver";
+      view.addEventListener("click", () => renderHistorySnapshot(box, snap));
+      actions.appendChild(view);
+      if (canEdit) {
+        const del = document.createElement("button");
+        del.className = "btn-danger-sm";
+        del.textContent = "🗑️";
+        del.title = "Excluir este registro do histórico";
+        del.addEventListener("click", async () => {
+          if (!confirm(`Excluir o registro "${snap.name}" do histórico?`)) return;
+          const backup = activeBoardHistory;
+          activeBoardHistory = activeBoardHistory.filter(h => h.id !== snap.id);
+          try {
+            await persistBoardHistory();
+            saveBoardState();
+            renderHistoryList(box);
+          } catch (err) {
+            activeBoardHistory = backup;
+            alert("Não foi possível excluir: " + (err.message || err));
+          }
+        });
+        actions.appendChild(del);
+      }
+      row.append(info, actions);
+      box.appendChild(row);
+    });
+  }
+
+  function renderHistorySnapshot(box, snap) {
+    box.innerHTML = "";
+    historyHeader(box, `🕘 ${snap.name}`, () => renderHistoryList(box));
+    const sub = document.createElement("div");
+    sub.style.cssText = "font-size:0.85rem;color:var(--text-muted);";
+    sub.textContent = `${new Date(snap.savedAt).toLocaleString("pt-BR")} • por ${snap.savedBy} • somente leitura`;
+    box.appendChild(sub);
+
+    const images = historyImageLookup();
+    const makeThumb = (item) => {
+      const avg = snap.avgs && snap.avgs[item.id];
+      const label = avg !== undefined ? `${item.title} — média ${avg}` : item.title;
+      const src = images.get(item.id);
+      if (src) {
+        const img = document.createElement("img");
+        img.src = src;
+        img.title = label;
+        img.style.cssText = "height:64px;max-width:48px;object-fit:cover;border-radius:5px;";
+        return img;
+      }
+      const ph = document.createElement("div");
+      ph.title = label;
+      ph.textContent = item.title;
+      ph.style.cssText = "height:64px;width:48px;border-radius:5px;background:#222;font-size:0.55rem;display:flex;align-items:center;justify-content:center;text-align:center;overflow:hidden;color:#aaa;padding:2px;box-sizing:border-box;";
+      return ph;
+    };
+
+    snap.tiers.forEach(t => {
+      const row = document.createElement("div");
+      row.style.cssText = "display:flex;border:1px solid #333;border-radius:6px;overflow:hidden;min-height:70px;";
+      const label = document.createElement("div");
+      label.textContent = t.name;
+      label.style.cssText = `width:110px;flex-shrink:0;background:${t.color};color:#000;font-weight:700;display:flex;align-items:center;justify-content:center;text-align:center;padding:4px;box-sizing:border-box;`;
+      const items = document.createElement("div");
+      items.style.cssText = "display:flex;flex-wrap:wrap;gap:4px;padding:3px;align-items:center;";
+      t.items.forEach(i => items.appendChild(makeThumb(i)));
+      row.append(label, items);
+      box.appendChild(row);
+    });
+
+    if (snap.bank && snap.bank.length > 0) {
+      const bt = document.createElement("div");
+      bt.textContent = `Banco de imagens (${snap.bank.length})`;
+      bt.style.cssText = "font-size:0.85rem;color:var(--text-muted);";
+      const bank = document.createElement("div");
+      bank.style.cssText = "display:flex;flex-wrap:wrap;gap:4px;";
+      snap.bank.forEach(i => bank.appendChild(makeThumb(i)));
+      box.append(bt, bank);
+    }
+  }
+
+  const saveHistoryBtnEl = document.getElementById("save-history-btn");
+  const openHistoryBtnEl = document.getElementById("open-history-btn");
+  if (saveHistoryBtnEl) saveHistoryBtnEl.addEventListener("click", saveCurrentStateToHistory);
+  if (openHistoryBtnEl) openHistoryBtnEl.addEventListener("click", openHistoryModal);
+
   // --- Upload Images (Local Files) ---
 
   function convertToWebP(file) {
@@ -3447,6 +3673,8 @@
         }
       }
 
+      if (activeBoardHistory.length > 0) row_metadata.push({ history: activeBoardHistory });
+
       saveBoardBtn.textContent = "Salvando...";
 
       const userName = localStorage.getItem("roleta-nmdp-session") || "Anônimo";
@@ -3469,6 +3697,7 @@
       if (error) throw error;
 
       saveBoardState();
+      updateBoardPermissionsUI();
       alert("Tabuleiro salvo na nuvem com sucesso!");
       renderSavedBoards();
       
@@ -3901,6 +4130,10 @@
               }
             }
             unvotedBankData = JSON.parse(JSON.stringify(embeddedUnvoted || []));
+            {
+              const histMeta = Array.isArray(details.row_metadata) ? details.row_metadata.find(m => m && Array.isArray(m.history)) : null;
+              activeBoardHistory = histMeta ? JSON.parse(JSON.stringify(histMeta.history)) : [];
+            }
             activeEditing = true;
 
             await loadFeaturedBoardRatings(board.id, details.row_metadata);
@@ -4023,6 +4256,7 @@ CREATE POLICY "Allow delete" ON public.tier_lists FOR DELETE USING (true);</pre>
 
       // Reset editor session
       activeBoardId = null;
+      activeBoardHistory = [];
       activeBoardIsFeatured = false;
       activeBoardType = "rating";
       activeBoardCreatedBy = null;
@@ -4513,6 +4747,7 @@ CREATE POLICY "Allow delete" ON public.tier_lists FOR DELETE USING (true);</pre>
 
     // A fresh board creation reset
     activeBoardId = null;
+    activeBoardHistory = [];
     activeBoardIsFeatured = false;
     activeBoardCreatedBy = localStorage.getItem("roleta-nmdp-session") || "Anônimo";
     const typeChoice = document.querySelector('input[name="setup-type"]:checked');
@@ -4600,6 +4835,7 @@ CREATE POLICY "Allow delete" ON public.tier_lists FOR DELETE USING (true);</pre>
 
       activeEditing = false;
       activeBoardId = null;
+      activeBoardHistory = [];
       activeBoardIsFeatured = false;
       activeBoardType = "rating";
       activeBoardCreatedBy = null;
