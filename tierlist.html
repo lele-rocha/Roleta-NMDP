@@ -487,9 +487,14 @@
       <!-- Populated dynamically by JS -->
     </div>
 
-    <button type="button" id="submit-inline-rating-btn" class="btn-primary" style="width: 100%; padding: 0.45rem; font-size: 0.85rem; font-weight: 700; background: linear-gradient(135deg, var(--accent), #5f27cd); color: #fff; margin-top: 0.25rem; border-radius: 8px;">
-      💾 Confirmar Nota
-    </button>
+    <div style="display: flex; gap: 0.5rem; margin-top: 0.25rem;">
+      <button type="button" id="delete-inline-item-btn" class="btn-danger-sm" style="flex: 1; padding: 0.45rem; font-size: 0.8rem; background: rgba(255, 71, 87, 0.15); border: 1px solid #ff4757; color: #ff6b81; border-radius: 8px; cursor: pointer;" title="Excluir este item do tabuleiro permanentemente">
+        🗑️ Excluir
+      </button>
+      <button type="button" id="submit-inline-rating-btn" class="btn-primary" style="flex: 2; padding: 0.45rem; font-size: 0.85rem; font-weight: 700; background: linear-gradient(135deg, var(--accent), #5f27cd); color: #fff; border-radius: 8px;">
+        💾 Confirmar Nota
+      </button>
+    </div>
   </div>
 
   <!-- External libraries and scripts -->
@@ -498,6 +503,6 @@
   <script src="config.js?v=33"></script>
   <script src="users-panel.js?v=1"></script>
   <script src="ambient-bg.js?v=33"></script>
-  <script src="tierlist.js?v=45"></script>
+  <script src="tierlist.js?v=46"></script>
 </body>
 </html>

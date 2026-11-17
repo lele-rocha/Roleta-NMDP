@@ -604,6 +604,7 @@
   const inlineRatingSlider = document.getElementById("inline-rating-slider");
   const inlineRatingValue = document.getElementById("inline-rating-value");
   const submitInlineRatingBtn = document.getElementById("submit-inline-rating-btn");
+  const deleteInlineItemBtn = document.getElementById("delete-inline-item-btn");
   const closeInlineRatingBtn = document.getElementById("close-inline-rating-btn");
 
   const imageHoverPreviewRatingBox = document.getElementById("image-hover-preview-rating-box");
@@ -1503,6 +1504,44 @@
 
   if (closeInlineRatingBtn) {
     closeInlineRatingBtn.addEventListener("click", closeInlineRatingCard);
+  }
+
+  if (deleteInlineItemBtn) {
+    deleteInlineItemBtn.addEventListener("click", async () => {
+      if (!activeRatingItem) return;
+      if (!canUserEditActiveBoard()) {
+        alert("Apenas quem pode editar este tabuleiro pode remover itens dele.");
+        return;
+      }
+      const title = activeRatingItem.title || "este item";
+      if (!confirm(`Deseja realmente excluir "${title}" deste tabuleiro?`)) return;
+
+      const targetId = activeRatingItem.id;
+      const targetSrc = activeRatingItem.src;
+      closeInlineRatingCard();
+
+      // Remove os elementos visuais do tabuleiro
+      document.querySelectorAll(`.tier-item-wrapper[data-id="${targetId}"], .tier-item-img[data-id="${targetId}"]`).forEach(el => {
+        const wrap = el.closest(".tier-item-wrapper") || el;
+        wrap.remove();
+      });
+
+      // Remove dos arrays em memória
+      tiersData.forEach(t => {
+        if (Array.isArray(t.items)) {
+          t.items = t.items.filter(i => i.id !== targetId && (!targetSrc || i.src !== targetSrc));
+        }
+      });
+      bankData = bankData.filter(i => i.id !== targetId && (!targetSrc || i.src !== targetSrc));
+      unvotedBankData = unvotedBankData.filter(i => i.id !== targetId && (!targetSrc || i.src !== targetSrc));
+
+      if (activeBoardRatings[targetId]) {
+        delete activeBoardRatings[targetId];
+      }
+
+      saveBoardState();
+      await autoSaveActiveBoard(`🗑️ "${title}" removido do tabuleiro!`);
+    });
   }
 
   if (submitInlineRatingBtn) {
