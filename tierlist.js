@@ -1305,10 +1305,14 @@
 
     saveBoardState();
 
-    // Atualiza na tabela cards no Supabase se houver cardId
-    if (supabase && cardId) {
+    // Atualiza na tabela cards no Supabase se houver cardId ou imagem correspondente
+    if (supabase) {
       try {
-        await supabase.from("cards").update({ title: cleanName }).eq("id", cardId);
+        if (cardId) {
+          await supabase.from("cards").update({ title: cleanName }).eq("id", cardId);
+        } else if (targetSrc) {
+          await supabase.from("cards").update({ title: cleanName }).eq("image_data_url", targetSrc);
+        }
       } catch (err) {
         console.warn("Erro ao atualizar título na tabela cards:", err);
       }
@@ -1344,24 +1348,60 @@
     showAutoSaveToast("⏳ Removendo imagem de todo o site...");
 
     const targetId = targetItem.id;
-    const targetSrc = targetItem.src;
+    let targetSrc = targetItem.src;
+    const targetTitle = (targetItem.title || "").trim();
+    const normTargetTitle = !isGenericImageTitle(targetTitle) ? normalizeSiteText(targetTitle) : "";
     const cardId = targetItem.cardId || (targetId && targetId.startsWith("item-") ? targetId.slice(5) : null);
 
-    // 1. Remove elementos visuais do DOM
-    document.querySelectorAll(`.tier-item-wrapper[data-id="${targetId}"], .tier-item-img[data-id="${targetId}"]`).forEach(el => {
-      const wrap = el.closest(".tier-item-wrapper") || el;
-      wrap.remove();
+    // Se o targetSrc não veio completo mas temos cardId, tenta resolver a imagem sob demanda
+    if (!targetSrc && cardId && typeof fetchSiteCardImage === "function") {
+      try {
+        targetSrc = await fetchSiteCardImage(cardId);
+      } catch (e) {
+        console.warn("Não foi possível resolver src do card antes da exclusão global:", e);
+      }
+    }
+
+    // Predicado universal de comparação para conferir se um item corresponde ao alvo
+    function isItemMatch(i) {
+      if (!i) return false;
+      // 1. Match por ID exato
+      if (targetId && i.id === targetId) return true;
+      // 2. Match por cardId
+      if (cardId) {
+        if (i.cardId && i.cardId === cardId) return true;
+        if (i.id === "item-" + cardId || i.id === cardId) return true;
+      }
+      // 3. Match por src exato
+      if (targetSrc && i.src && i.src === targetSrc) return true;
+      // 4. Match por título normalizado (se o título não for genérico)
+      if (normTargetTitle && i.title && !isGenericImageTitle(i.title)) {
+        if (normalizeSiteText(i.title) === normTargetTitle) return true;
+      }
+      return false;
+    }
+
+    // 1. Remove elementos visuais do DOM do tabuleiro atual
+    document.querySelectorAll(".tier-item-wrapper, .tier-item-img").forEach(el => {
+      const elId = el.dataset.id;
+      const elTitle = el.title || el.dataset.title;
+      const match = (targetId && elId === targetId) ||
+                    (normTargetTitle && elTitle && normalizeSiteText(elTitle) === normTargetTitle);
+      if (match) {
+        const wrap = el.closest(".tier-item-wrapper") || el;
+        wrap.remove();
+      }
     });
 
     // 2. Remove dos arrays do tabuleiro atual
     tiersData.forEach(t => {
       if (Array.isArray(t.items)) {
-        t.items = t.items.filter(i => i.id !== targetId && (!targetSrc || i.src !== targetSrc));
+        t.items = t.items.filter(i => !isItemMatch(i));
       }
     });
-    bankData = bankData.filter(i => i.id !== targetId && (!targetSrc || i.src !== targetSrc));
-    unvotedBankData = unvotedBankData.filter(i => i.id !== targetId && (!targetSrc || i.src !== targetSrc));
-    if (activeBoardRatings[targetId]) delete activeBoardRatings[targetId];
+    bankData = bankData.filter(i => !isItemMatch(i));
+    unvotedBankData = unvotedBankData.filter(i => !isItemMatch(i));
+    if (targetId && activeBoardRatings[targetId]) delete activeBoardRatings[targetId];
 
     saveBoardState();
 
@@ -1374,6 +1414,9 @@
         }
         if (targetSrc) {
           await supabase.from("cards").delete().eq("image_data_url", targetSrc);
+        }
+        if (normTargetTitle) {
+          await supabase.from("cards").delete().ilike("title", targetTitle);
         }
       } catch (err) {
         console.warn("Erro ao excluir imagem de cards:", err);
@@ -1391,7 +1434,7 @@
             let updatedTiers = b.tiers;
             if (Array.isArray(b.tiers)) {
               updatedTiers = b.tiers.map(t => {
-                const filtered = (t.items || []).filter(i => i.id !== targetId && (!targetSrc || i.src !== targetSrc));
+                const filtered = (t.items || []).filter(i => !isItemMatch(i));
                 if (filtered.length !== (t.items || []).length) changed = true;
                 return { ...t, items: filtered };
               });
@@ -1399,15 +1442,16 @@
 
             let updatedBank = b.bank;
             if (Array.isArray(b.bank)) {
-              updatedBank = b.bank.filter(i => i.id !== targetId && (!targetSrc || i.src !== targetSrc));
-              if (updatedBank.length !== b.bank.length) changed = true;
+              const filtered = b.bank.filter(i => !isItemMatch(i));
+              if (filtered.length !== b.bank.length) changed = true;
+              updatedBank = filtered;
             }
 
             let updatedMeta = b.row_metadata;
             if (Array.isArray(b.row_metadata)) {
               updatedMeta = b.row_metadata.map(m => {
                 if (m && Array.isArray(m.unvoted_bank)) {
-                  const filtered = m.unvoted_bank.filter(i => i.id !== targetId && (!targetSrc || i.src !== targetSrc));
+                  const filtered = m.unvoted_bank.filter(i => !isItemMatch(i));
                   if (filtered.length !== m.unvoted_bank.length) changed = true;
                   return { ...m, unvoted_bank: filtered };
                 }
@@ -1416,12 +1460,15 @@
             }
 
             if (changed) {
-              await supabase.from("tier_lists").update({
+              const { error: upErr } = await supabase.from("tier_lists").update({
                 tiers: updatedTiers,
                 bank: updatedBank,
                 row_metadata: updatedMeta,
                 updated_at: new Date().toISOString()
               }).eq("id", b.id);
+              if (upErr) {
+                console.error(`Erro ao atualizar tabuleiro ${b.id} durante exclusão global:`, upErr);
+              }
             }
           }
         }
@@ -1432,12 +1479,7 @@
 
     // 4. Remove do cache do banco de imagens do site
     if (siteBankItems) {
-      siteBankItems = siteBankItems.filter(i => {
-        if (i.id === targetId) return false;
-        if (targetSrc && i.src === targetSrc) return false;
-        if (cardId && i.cardId === cardId) return false;
-        return true;
-      });
+      siteBankItems = siteBankItems.filter(i => !isItemMatch(i));
       renderSiteBank();
     }
 
