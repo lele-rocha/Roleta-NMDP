@@ -2580,103 +2580,35 @@
   }
 
   async function handleFilesUpload(files) {
-    if (!canUserEditActiveBoard()) {
-      alert("Apenas quem pode editar este tabuleiro consegue adicionar imagens ao banco dele.");
-      return;
-    }
+    if (!files || files.length === 0) return;
+    const fileList = Array.from(files);
 
     let addedCount = 0;
     let lastAddedTitle = "";
 
-    // Pre-carrega cache de cards para evitar duplicatas caso ainda não tenha sido consultado
-    if (supabase && !cachedDbCardsForSearch) {
-      await getDbCardsForSearch();
-    }
-
-    const onBoard = () => [...document.querySelectorAll(".tier-item-img")];
-
-    for (const file of files) {
-      if (!file.type.startsWith("image/")) continue;
+    for (const file of fileList) {
+      if (!file.type || !file.type.startsWith("image/")) continue;
       try {
         const webpSrc = await convertToWebP(file);
         let titleName = file.name.replace(/\.[^/.]+$/, ""); // strip extension
         if (!titleName || titleName.toLowerCase() === "image" || titleName.toLowerCase() === "blob") {
           titleName = "Novo Item";
         }
+
+        // Abre a janela para nomear a imagem IMEDIATAMENTE (sem travas ou chamadas de rede antes)
         const chosen = await askImageName(webpSrc, titleName);
         if (chosen === null) continue;
         titleName = (chosen || "").trim() || titleName;
 
-        // Evita duplicar a mesma imagem no tabuleiro atual
-        if (onBoard().some(img => img.src === webpSrc)) {
-          showAutoSaveToast(`Esta imagem ("${titleName}") já está no tabuleiro.`);
-          continue;
-        }
+        // 1. Gera id único do card e do item
+        const sessionUser = (loadSessionUser() || "lele").toLowerCase().trim() || "lele";
+        const rawCardId = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+        const cardId = (sessionUser === "lele") ? rawCardId : `u_${sessionUser}__galeria_${rawCardId}`;
+        const itemId = "item-" + cardId;
 
-        // Verifica se já existe um card global registrado com essa imagem
-        let cardId = null;
-        if (cachedDbCardsForSearch) {
-          const existingCard = cachedDbCardsForSearch.find(c => c.image_data_url === webpSrc);
-          if (existingCard) {
-            cardId = existingCard.id;
-          }
-        }
-
-        // Se não existir, cadastra como um novo card no banco global (tabela 'cards' do Supabase)
-        if (!cardId) {
-          const sessionUser = (loadSessionUser() || "lele").toLowerCase().trim() || "lele";
-          const rawCardId = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-          cardId = (sessionUser === "lele") ? rawCardId : `u_${sessionUser}__galeria_${rawCardId}`;
-
-          if (supabase) {
-            try {
-              const { error: cardErr } = await supabase.from("cards").insert([{
-                id: cardId,
-                title: titleName,
-                description: null,
-                image_data_url: webpSrc,
-                timestamp: Date.now(),
-                votes: 0
-              }]);
-
-              if (cardErr) {
-                console.warn("Aviso ao cadastrar card no banco global:", cardErr);
-              } else {
-                console.log(`Card "${titleName}" cadastrado no banco global (cards):`, cardId);
-                // Atualiza cache da busca rápida por título
-                if (cachedDbCardsForSearch) {
-                  cachedDbCardsForSearch.push({
-                    id: cardId,
-                    title: titleName,
-                    image_data_url: webpSrc,
-                    votes: 0
-                  });
-                }
-                // Atualiza o Banco de Imagens do Site na tela se estiver carregado
-                if (siteBankItems) {
-                  const alreadyPresent = siteBankItems.some(i => i.cardId === cardId || i.id === "item-" + cardId);
-                  if (!alreadyPresent) {
-                    siteBankItems.unshift({
-                      kind: "card",
-                      id: "item-" + cardId,
-                      cardId: cardId,
-                      title: titleName,
-                      src: webpSrc,
-                      origin: "Galeria"
-                    });
-                    siteBankCardImages.set(cardId, webpSrc);
-                    renderSiteBank();
-                  }
-                }
-              }
-            } catch (err) {
-              console.warn("Erro ao cadastrar card no Supabase:", err);
-            }
-          }
-        }
-
+        // 2. Insere o elemento na tela imediatamente
         const item = {
-          id: "item-" + cardId,
+          id: itemId,
           src: webpSrc,
           title: titleName
         };
@@ -2685,6 +2617,48 @@
         bankContainer.appendChild(imgEl);
         addedCount++;
         lastAddedTitle = titleName;
+
+        // 3. Cadastra no banco global (tabela 'cards' do Supabase) em background
+        if (supabase) {
+          supabase.from("cards").insert([{
+            id: cardId,
+            title: titleName,
+            description: null,
+            image_data_url: webpSrc,
+            timestamp: Date.now(),
+            votes: 0
+          }]).then(({ error }) => {
+            if (error) {
+              console.warn("Aviso ao cadastrar card no banco global:", error);
+            } else {
+              console.log(`Card "${titleName}" gravado no banco global com sucesso.`);
+              // Se o Banco de Imagens do Site estiver carregado na tela, adiciona no topo
+              if (siteBankItems) {
+                const alreadyPresent = siteBankItems.some(i => i.cardId === cardId || i.id === itemId);
+                if (!alreadyPresent) {
+                  siteBankItems.unshift({
+                    kind: "card",
+                    id: itemId,
+                    cardId: cardId,
+                    title: titleName,
+                    src: webpSrc,
+                    origin: "Galeria"
+                  });
+                  siteBankCardImages.set(cardId, webpSrc);
+                  renderSiteBank();
+                }
+              }
+              if (cachedDbCardsForSearch) {
+                cachedDbCardsForSearch.push({
+                  id: cardId,
+                  title: titleName,
+                  image_data_url: webpSrc,
+                  votes: 0
+                });
+              }
+            }
+          }).catch(err => console.warn("Erro ao cadastrar card no Supabase:", err));
+        }
       } catch (err) {
         console.error("Erro ao converter arquivo:", file.name, err);
       }
@@ -2696,8 +2670,59 @@
         const toastMsg = addedCount === 1
           ? `🖼️ "${lastAddedTitle}" adicionado ao tabuleiro e ao banco do site!`
           : `🖼️ ${addedCount} imagens adicionadas ao tabuleiro e ao banco do site!`;
-        await autoSaveActiveBoard(toastMsg);
+        autoSaveActiveBoard(toastMsg);
       }
+    }
+  }
+
+  // Sincroniza qualquer imagem com dataURL presente no tabuleiro que ainda não tenha card global
+  async function syncBoardItemsToGlobalBank() {
+    if (!supabase) return;
+    try {
+      const allItems = [
+        ...tiersData.flatMap(t => t.items || []),
+        ...bankData,
+        ...unvotedBankData
+      ];
+      for (const it of allItems) {
+        if (!it || !it.src || !it.title || isGenericImageTitle(it.title)) continue;
+        if (typeof it.src === "string" && it.src.startsWith("data:image")) {
+          let cardId = (it.id && it.id.startsWith("item-")) ? it.id.slice(5) : null;
+          if (!cardId) {
+            cardId = "card_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+            it.id = "item-" + cardId;
+          }
+          const { data: existing } = await supabase.from("cards").select("id").eq("id", cardId).maybeSingle();
+          if (!existing) {
+            await supabase.from("cards").insert([{
+              id: cardId,
+              title: it.title,
+              description: null,
+              image_data_url: it.src,
+              timestamp: Date.now(),
+              votes: 0
+            }]);
+            console.log(`Item existente "${it.title}" sincronizado para o banco global.`);
+            if (siteBankItems) {
+              const already = siteBankItems.some(i => i.cardId === cardId || i.id === "item-" + cardId);
+              if (!already) {
+                siteBankItems.unshift({
+                  kind: "card",
+                  id: "item-" + cardId,
+                  cardId: cardId,
+                  title: it.title,
+                  src: it.src,
+                  origin: "Galeria"
+                });
+                siteBankCardImages.set(cardId, it.src);
+              }
+            }
+          }
+        }
+      }
+      if (siteBankItems) renderSiteBank();
+    } catch (e) {
+      console.warn("Aviso ao sincronizar itens do tabuleiro para o banco global:", e);
     }
   }
 
@@ -2707,9 +2732,10 @@
   }
 
   fileInputUpload.addEventListener("change", (e) => {
-    if (e.target.files.length > 0) {
-      handleFilesUpload(e.target.files);
+    if (e.target.files && e.target.files.length > 0) {
+      const selectedFiles = Array.from(e.target.files);
       fileInputUpload.value = "";
+      handleFilesUpload(selectedFiles);
     }
   });
 
@@ -2725,8 +2751,8 @@
   bankContainer.addEventListener("drop", (e) => {
     e.preventDefault();
     bankContainer.classList.remove("drag-over");
-    if (e.dataTransfer.files.length > 0) {
-      handleFilesUpload(e.dataTransfer.files);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      handleFilesUpload(Array.from(e.dataTransfer.files));
     }
   });
 
@@ -2734,21 +2760,20 @@
   window.addEventListener("paste", (e) => {
     if (!activeEditing) return;
 
-    const items = e.clipboardData.items;
-    let foundImage = false;
+    const items = e.clipboardData ? e.clipboardData.items : null;
+    if (!items) return;
+    const pastedFiles = [];
 
     for (let i = 0; i < items.length; i++) {
-      if (items[i].type.indexOf("image") !== -1) {
+      if (items[i].type && items[i].type.indexOf("image") !== -1) {
         const file = items[i].getAsFile();
-        if (file) {
-          foundImage = true;
-          handleFilesUpload([file]);
-        }
+        if (file) pastedFiles.push(file);
       }
     }
 
-    if (foundImage) {
+    if (pastedFiles.length > 0) {
       e.preventDefault();
+      handleFilesUpload(pastedFiles);
     }
   });
 
@@ -5018,6 +5043,9 @@ CREATE POLICY "Allow delete" ON public.tier_lists FOR DELETE USING (true);</pre>
       renderBank();
       renderUnvotedBank();
       setupBoardRealtime();
+      if (supabase) {
+        setTimeout(syncBoardItemsToGlobalBank, 1500);
+      }
       
       if (activeBoardId) {
         deleteBoardBtn.style.display = "inline-block";
