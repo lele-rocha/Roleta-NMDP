@@ -1817,6 +1817,11 @@
         return;
       }
 
+      if (zone === bankContainer || zone === unvotedBankContainer) {
+        if (activeBoardId && supabase) autoSaveActiveBoard("💾 Banco do tabuleiro atualizado!");
+        return;
+      }
+
       if (draggedEl && zone.classList.contains("tier-items")) {
         const img = draggedEl.querySelector(".tier-item-img") || draggedEl;
         const itemId = img.dataset.id;
@@ -2673,11 +2678,12 @@
 
     if (addedCount > 0) {
       saveBoardState();
-      if (supabase) {
+      if (supabase && activeBoardId) {
         const toastMsg = addedCount === 1
-          ? `🖼️ "${lastAddedTitle}" adicionado ao tabuleiro e salvo!`
-          : `🖼️ ${addedCount} imagens adicionadas ao tabuleiro e salvas!`;
-        autoSaveActiveBoard(toastMsg);
+          ? `✅ "${lastAddedTitle}" salvo no banco de dados!`
+          : `✅ ${addedCount} imagens salvas no banco de dados!`;
+        showAutoSaveToast("⏳ Salvando no banco de dados...");
+        await autoSaveActiveBoard(toastMsg);
       }
     }
   }
@@ -3019,12 +3025,34 @@
       newId = "item-" + Math.random().toString(36).slice(2, 9);
     }
 
+    const addBtn = tileEl ? tileEl.querySelector(".bank-tile__btn") : null;
+    if (addBtn) {
+      addBtn.disabled = true;
+      addBtn.textContent = "⏳ Salvando...";
+    }
+
+    showAutoSaveToast(`⏳ Salvando "${entry.title || "imagem"}" no banco...`);
+
     bankContainer.appendChild(createItemElement({ id: newId, src, title: entry.title || "" }));
     saveBoardState();
-    if (activeBoardId && supabase) autoSaveActiveBoard();
 
-    if (tileEl) tileEl.classList.add("in-board");
-    showAutoSaveToast(`🖼️ "${entry.title || "Imagem"}" adicionada ao banco do tabuleiro`);
+    if (activeBoardId && supabase) {
+      try {
+        await autoSaveActiveBoard(`✅ "${entry.title || "Imagem"}" salva no banco de dados!`);
+      } catch (err) {
+        console.warn("Erro ao auto-salvar imagem adicionada do banco:", err);
+      }
+    } else {
+      showAutoSaveToast(`🖼️ "${entry.title || "Imagem"}" adicionada ao banco do tabuleiro`);
+    }
+
+    if (tileEl) {
+      tileEl.classList.add("in-board");
+      if (addBtn) {
+        addBtn.disabled = false;
+        addBtn.textContent = "✔ Adicionada";
+      }
+    }
   }
 
   function renderSiteBank() {
@@ -3165,6 +3193,19 @@
     draggedSiteItem = null;
     addSiteImageToBoard(entry, tile);
   });
+
+  if (unvotedBankContainer) {
+    unvotedBankContainer.addEventListener("dragover", (e) => {
+      if (draggedSiteItem) e.preventDefault();
+    });
+    unvotedBankContainer.addEventListener("drop", (e) => {
+      if (!draggedSiteItem) return;
+      e.preventDefault();
+      const { entry, tile } = draggedSiteItem;
+      draggedSiteItem = null;
+      addSiteImageToBoard(entry, tile);
+    });
+  }
 
   // --- Supabase Cards Importing ---
 
@@ -4974,8 +5015,29 @@ CREATE POLICY "Allow delete" ON public.tier_lists FOR DELETE USING (true);</pre>
 
           if (details) {
             activeBoardType = getBoardTypeFromMeta(details.row_metadata);
+            if (details.created_by) activeBoardCreatedBy = details.created_by;
             if (Array.isArray(details.tiers)) tiersData = JSON.parse(JSON.stringify(details.tiers));
-            if (Array.isArray(details.bank)) bankData = JSON.parse(JSON.stringify(details.bank));
+
+            const remoteBank = Array.isArray(details.bank) ? JSON.parse(JSON.stringify(details.bank)) : [];
+
+            // Reúne todos os IDs e SRCs presentes no estado remoto para evitar duplicações
+            const remoteItemIds = new Set();
+            const remoteItemSrcs = new Set();
+            (details.tiers || []).forEach(t => (t.items || []).forEach(i => {
+              if (i.id) remoteItemIds.add(i.id);
+              if (i.src) remoteItemSrcs.add(i.src);
+            }));
+            remoteBank.forEach(i => {
+              if (i.id) remoteItemIds.add(i.id);
+              if (i.src) remoteItemSrcs.add(i.src);
+            });
+
+            // Preserva itens do bank local que ainda não constavam no banco remoto (ex: adicionados logo antes do F5)
+            const localOnlyItems = (bankData || []).filter(locItem => {
+              return locItem && !remoteItemIds.has(locItem.id) && !(locItem.src && remoteItemSrcs.has(locItem.src));
+            });
+
+            bankData = [...remoteBank, ...localOnlyItems];
 
             let embeddedUnvoted = [];
             if (Array.isArray(details.row_metadata)) {
@@ -4988,6 +5050,12 @@ CREATE POLICY "Allow delete" ON public.tier_lists FOR DELETE USING (true);</pre>
 
             await loadFeaturedBoardRatings(activeBoardId, details.row_metadata);
             applyFeaturedAutoSorting();
+
+            if (localOnlyItems.length > 0) {
+              setTimeout(() => {
+                autoSaveActiveBoard("🔄 Tabuleiro sincronizado com o banco de dados!");
+              }, 1200);
+            }
           }
         } catch (e) {
           console.warn("Erro ao recarregar dados do tabuleiro em destaque no init:", e);
