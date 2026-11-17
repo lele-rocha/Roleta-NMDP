@@ -457,42 +457,58 @@
     </div>
   </div>
 
-  <!-- Floating Inline Rating Card (0.1 Step Precision) -->
-  <div id="inline-rating-card" style="display: none; position: absolute; z-index: 99999; width: 290px; background: rgba(18, 20, 29, 0.96); backdrop-filter: blur(14px); border: 1px solid var(--accent); border-radius: 14px; padding: 1rem; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6); flex-direction: column; gap: 0.6rem; animation: popIn 0.2s cubic-bezier(0.4, 0, 0.2, 1);">
-    <div style="display: flex; justify-content: space-between; align-items: center; gap: 0.5rem;">
-      <span id="inline-rating-item-title" style="font-size: 0.85rem; font-weight: 700; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; cursor: pointer;" title="Clique para editar o título deste item">Item</span>
-      <button type="button" id="edit-inline-item-title-btn" style="background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 0.85rem; padding: 2px 4px;" title="Editar título do item">✏️</button>
-      <button type="button" id="close-inline-rating-btn" style="background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 1.1rem; padding: 0; line-height: 1;">✕</button>
-    </div>
-    
-    <div id="inline-rating-value-box" style="text-align: center; margin: 0.2rem 0;">
-      <div id="inline-rating-value-label" style="font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 700; display: none;">Média Final</div>
-      <div id="inline-rating-value" style="font-size: 1.75rem; font-weight: 800; color: #ffd700; text-shadow: 0 0 10px rgba(255, 215, 0, 0.4);">
-        5.0 / 10
+  <!-- Floating Item Management & Rating Card Popover -->
+  <div id="inline-rating-card" style="display: none; position: absolute; z-index: 99999; width: 320px; background: rgba(18, 20, 29, 0.98); backdrop-filter: blur(16px); border: 1px solid var(--accent); border-radius: 14px; padding: 1rem; box-shadow: 0 12px 36px rgba(0, 0, 0, 0.7); flex-direction: column; gap: 0.65rem; animation: popIn 0.2s cubic-bezier(0.4, 0, 0.2, 1);">
+    <!-- Header: Thumbnail + Name Input + Save Button + Close Button -->
+    <div style="display: flex; align-items: center; gap: 0.6rem;">
+      <img id="inline-card-item-thumb" src="" alt="Thumbnail" style="width: 44px; height: 44px; object-fit: cover; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.2); flex-shrink: 0;" />
+      <div style="flex: 1; display: flex; flex-direction: column; gap: 0.25rem; min-width: 0;">
+        <label style="font-size: 0.68rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Nome da Imagem</label>
+        <div style="display: flex; gap: 0.35rem; align-items: center;">
+          <input type="text" id="inline-item-name-input" class="input-text" placeholder="Nome do personagem / item" style="flex: 1; padding: 0.35rem 0.5rem; font-size: 0.82rem; font-weight: 600; min-width: 0;" />
+          <button type="button" id="save-inline-item-name-btn" class="btn-primary-sm" title="Salvar alteração de nome" style="padding: 0.35rem 0.6rem; font-size: 0.75rem; white-space: nowrap; flex-shrink: 0;">💾 Salvar</button>
+        </div>
       </div>
-    </div>
-    
-    <!-- Single Rating Container (used if no custom parameters exist) -->
-    <div id="single-rating-container">
-      <input type="range" id="inline-rating-slider" min="0" max="10" step="0.1" value="5.0" style="width: 100%; height: 6px; border-radius: 3px; accent-color: var(--accent); cursor: pointer;" />
-      <div style="display: flex; justify-content: space-between; font-size: 0.65rem; color: var(--text-muted); font-weight: 600; margin-top: 0.25rem;">
-        <span>0.0</span>
-        <span>5.0</span>
-        <span>10.0</span>
-      </div>
+      <button type="button" id="close-inline-rating-btn" style="background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 1.2rem; padding: 0 0 0.5rem 0.25rem; line-height: 1; align-self: flex-start;" title="Fechar">✕</button>
     </div>
 
-    <!-- Parameter Sliders Container (used when tier list has parameters) -->
-    <div id="parameters-rating-container" style="display: none; flex-direction: column; gap: 0.65rem; max-height: 250px; overflow-y: auto; padding-right: 2px;">
-      <!-- Populated dynamically by JS -->
-    </div>
+    <!-- Rating Voting Section (only for rating boards) -->
+    <div id="inline-rating-voting-section" style="display: flex; flex-direction: column; gap: 0.5rem; border-top: 1px solid rgba(255, 255, 255, 0.08); padding-top: 0.5rem;">
+      <div id="inline-rating-value-box" style="text-align: center; margin: 0.1rem 0;">
+        <div id="inline-rating-value-label" style="font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 700; display: none;">Média Final</div>
+        <div id="inline-rating-value" style="font-size: 1.6rem; font-weight: 800; color: #ffd700; text-shadow: 0 0 10px rgba(255, 215, 0, 0.4);">
+          5.0 / 10
+        </div>
+      </div>
+      
+      <!-- Single Rating Container (used if no custom parameters exist) -->
+      <div id="single-rating-container">
+        <input type="range" id="inline-rating-slider" min="0" max="10" step="0.1" value="5.0" style="width: 100%; height: 6px; border-radius: 3px; accent-color: var(--accent); cursor: pointer;" />
+        <div style="display: flex; justify-content: space-between; font-size: 0.65rem; color: var(--text-muted); font-weight: 600; margin-top: 0.25rem;">
+          <span>0.0</span>
+          <span>5.0</span>
+          <span>10.0</span>
+        </div>
+      </div>
 
-    <div style="display: flex; gap: 0.5rem; margin-top: 0.25rem;">
-      <button type="button" id="delete-inline-item-btn" class="btn-danger-sm" style="flex: 1; padding: 0.45rem; font-size: 0.8rem; background: rgba(255, 71, 87, 0.15); border: 1px solid #ff4757; color: #ff6b81; border-radius: 8px; cursor: pointer;" title="Excluir este item do tabuleiro permanentemente">
-        🗑️ Excluir
+      <!-- Parameter Sliders Container (used when tier list has parameters) -->
+      <div id="parameters-rating-container" style="display: none; flex-direction: column; gap: 0.55rem; max-height: 200px; overflow-y: auto; padding-right: 2px;">
+        <!-- Populated dynamically by JS -->
+      </div>
+
+      <!-- Submit Rating Button -->
+      <button type="button" id="submit-inline-rating-btn" class="btn-primary" style="padding: 0.45rem; font-size: 0.85rem; font-weight: 700; background: linear-gradient(135deg, var(--accent), #5f27cd); color: #fff; border-radius: 8px;">
+        ⭐ Confirmar Nota
       </button>
-      <button type="button" id="submit-inline-rating-btn" class="btn-primary" style="flex: 2; padding: 0.45rem; font-size: 0.85rem; font-weight: 700; background: linear-gradient(135deg, var(--accent), #5f27cd); color: #fff; border-radius: 8px;">
-        💾 Confirmar Nota
+    </div>
+
+    <!-- Actions Section: Remover da Tier List & Remover do Banco de Imagens do Site -->
+    <div style="display: flex; flex-direction: column; gap: 0.4rem; border-top: 1px solid rgba(255, 255, 255, 0.08); padding-top: 0.5rem;">
+      <button type="button" id="delete-inline-item-btn" class="btn-danger-sm" style="width: 100%; padding: 0.45rem; font-size: 0.8rem; background: rgba(255, 71, 87, 0.12); border: 1px solid rgba(255, 71, 87, 0.5); color: #ff6b81; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.4rem;" title="Remove esta imagem apenas deste tabuleiro">
+        🗑️ Remover da Tier List
+      </button>
+      <button type="button" id="delete-global-item-btn" class="btn-danger-sm" style="width: 100%; padding: 0.45rem; font-size: 0.78rem; background: rgba(192, 57, 43, 0.2); border: 1px solid #c0392b; color: #ff7675; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.4rem;" title="Exclui esta imagem de todo o site (galerias, banco de imagens e todos os tabuleiros)">
+        🌐 Remover do Banco de Imagens do Site
       </button>
     </div>
   </div>
@@ -503,6 +519,6 @@
   <script src="config.js?v=33"></script>
   <script src="users-panel.js?v=1"></script>
   <script src="ambient-bg.js?v=33"></script>
-  <script src="tierlist.js?v=47"></script>
+  <script src="tierlist.js?v=48"></script>
 </body>
 </html>

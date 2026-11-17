@@ -600,11 +600,15 @@
   let activeRatingItem = null;
 
   const inlineRatingCard = document.getElementById("inline-rating-card");
-  const inlineRatingItemTitle = document.getElementById("inline-rating-item-title");
+  const inlineCardItemThumb = document.getElementById("inline-card-item-thumb");
+  const inlineItemNameInput = document.getElementById("inline-item-name-input");
+  const saveInlineItemNameBtn = document.getElementById("save-inline-item-name-btn");
+  const inlineRatingVotingSection = document.getElementById("inline-rating-voting-section");
   const inlineRatingSlider = document.getElementById("inline-rating-slider");
   const inlineRatingValue = document.getElementById("inline-rating-value");
   const submitInlineRatingBtn = document.getElementById("submit-inline-rating-btn");
   const deleteInlineItemBtn = document.getElementById("delete-inline-item-btn");
+  const deleteGlobalItemBtn = document.getElementById("delete-global-item-btn");
   const closeInlineRatingBtn = document.getElementById("close-inline-rating-btn");
 
   const imageHoverPreviewRatingBox = document.getElementById("image-hover-preview-rating-box");
@@ -1257,14 +1261,196 @@
     renderUnvotedBank();
   }
 
-  function openInlineRatingCard(item, targetImgElement) {
-    if (!item || !inlineRatingCard) return;
-
-    if (!canUserVoteOnActiveBoard()) {
-      const creatorName = activeBoardCreatedBy || "o criador";
-      alert(`Apenas o criador deste tabuleiro (${creatorName}) pode votar nele.`);
+  async function saveItemNewName(newName) {
+    if (!activeRatingItem) return;
+    const cleanName = (newName || "").trim();
+    if (!cleanName) {
+      alert("O nome da imagem não pode ficar vazio.");
       return;
     }
+
+    const targetId = activeRatingItem.id;
+    const targetSrc = activeRatingItem.src;
+    const cardId = activeRatingItem.cardId || (targetId && targetId.startsWith("item-") ? targetId.slice(5) : null);
+
+    activeRatingItem.title = cleanName;
+
+    // Atualiza nos elementos visuais do DOM
+    document.querySelectorAll(`.tier-item-img[data-id="${targetId}"]`).forEach(img => {
+      img.title = cleanName;
+    });
+
+    // Atualiza nos arrays em memória
+    tiersData.forEach(t => {
+      (t.items || []).forEach(i => {
+        if (i.id === targetId || (targetSrc && i.src === targetSrc)) i.title = cleanName;
+      });
+    });
+    bankData.forEach(i => {
+      if (i.id === targetId || (targetSrc && i.src === targetSrc)) i.title = cleanName;
+    });
+    unvotedBankData.forEach(i => {
+      if (i.id === targetId || (targetSrc && i.src === targetSrc)) i.title = cleanName;
+    });
+
+    // Atualiza no cache do banco de imagens do site
+    if (siteBankItems) {
+      siteBankItems.forEach(i => {
+        if (i.id === targetId || (targetSrc && i.src === targetSrc) || (cardId && i.cardId === cardId)) {
+          i.title = cleanName;
+        }
+      });
+      renderSiteBank();
+    }
+
+    saveBoardState();
+
+    // Atualiza na tabela cards no Supabase se houver cardId
+    if (supabase && cardId) {
+      try {
+        await supabase.from("cards").update({ title: cleanName }).eq("id", cardId);
+      } catch (err) {
+        console.warn("Erro ao atualizar título na tabela cards:", err);
+      }
+    }
+
+    if (activeBoardId && supabase) {
+      await autoSaveActiveBoard(`✏️ Nome alterado para "${cleanName}"!`);
+    } else {
+      showAutoSaveToast(`✏️ Nome alterado para "${cleanName}"!`);
+    }
+  }
+
+  async function deleteItemFromGlobalSite(targetItem) {
+    if (!targetItem) return;
+    if (!canUserEditActiveBoard()) {
+      alert("Apenas quem pode editar este tabuleiro tem permissão para remover itens do banco global do site.");
+      return;
+    }
+
+    const title = targetItem.title || "esta imagem";
+    const confirmDelete = confirm(
+      `⚠️ REMOVER DO BANCO DE IMAGENS DO SITE?\n\n` +
+      `Tem certeza que deseja excluir "${title}" permanentemente de TODO O SITE?\n\n` +
+      `Esta ação é permanente e irá:\n` +
+      `• Excluir a imagem da galeria global (tabela cards)\n` +
+      `• Remover a imagem de todos os tabuleiros salvos no site\n` +
+      `• Remover do tabuleiro atual e do banco de imagens\n\n` +
+      `Deseja prosseguir?`
+    );
+    if (!confirmDelete) return;
+
+    closeInlineRatingCard();
+    showAutoSaveToast("⏳ Removendo imagem de todo o site...");
+
+    const targetId = targetItem.id;
+    const targetSrc = targetItem.src;
+    const cardId = targetItem.cardId || (targetId && targetId.startsWith("item-") ? targetId.slice(5) : null);
+
+    // 1. Remove elementos visuais do DOM
+    document.querySelectorAll(`.tier-item-wrapper[data-id="${targetId}"], .tier-item-img[data-id="${targetId}"]`).forEach(el => {
+      const wrap = el.closest(".tier-item-wrapper") || el;
+      wrap.remove();
+    });
+
+    // 2. Remove dos arrays do tabuleiro atual
+    tiersData.forEach(t => {
+      if (Array.isArray(t.items)) {
+        t.items = t.items.filter(i => i.id !== targetId && (!targetSrc || i.src !== targetSrc));
+      }
+    });
+    bankData = bankData.filter(i => i.id !== targetId && (!targetSrc || i.src !== targetSrc));
+    unvotedBankData = unvotedBankData.filter(i => i.id !== targetId && (!targetSrc || i.src !== targetSrc));
+    if (activeBoardRatings[targetId]) delete activeBoardRatings[targetId];
+
+    saveBoardState();
+
+    // 3. Remove do Supabase
+    if (supabase) {
+      // 3a. Remove da tabela cards
+      try {
+        if (cardId) {
+          await supabase.from("cards").delete().eq("id", cardId);
+        }
+        if (targetSrc) {
+          await supabase.from("cards").delete().eq("image_data_url", targetSrc);
+        }
+      } catch (err) {
+        console.warn("Erro ao excluir imagem de cards:", err);
+      }
+
+      // 3b. Remove de todos os tabuleiros em tier_lists
+      try {
+        const { data: boards, error: boardsErr } = await supabase
+          .from("tier_lists")
+          .select("id, tiers, bank, row_metadata");
+
+        if (!boardsErr && Array.isArray(boards)) {
+          for (const b of boards) {
+            let changed = false;
+            let updatedTiers = b.tiers;
+            if (Array.isArray(b.tiers)) {
+              updatedTiers = b.tiers.map(t => {
+                const filtered = (t.items || []).filter(i => i.id !== targetId && (!targetSrc || i.src !== targetSrc));
+                if (filtered.length !== (t.items || []).length) changed = true;
+                return { ...t, items: filtered };
+              });
+            }
+
+            let updatedBank = b.bank;
+            if (Array.isArray(b.bank)) {
+              updatedBank = b.bank.filter(i => i.id !== targetId && (!targetSrc || i.src !== targetSrc));
+              if (updatedBank.length !== b.bank.length) changed = true;
+            }
+
+            let updatedMeta = b.row_metadata;
+            if (Array.isArray(b.row_metadata)) {
+              updatedMeta = b.row_metadata.map(m => {
+                if (m && Array.isArray(m.unvoted_bank)) {
+                  const filtered = m.unvoted_bank.filter(i => i.id !== targetId && (!targetSrc || i.src !== targetSrc));
+                  if (filtered.length !== m.unvoted_bank.length) changed = true;
+                  return { ...m, unvoted_bank: filtered };
+                }
+                return m;
+              });
+            }
+
+            if (changed) {
+              await supabase.from("tier_lists").update({
+                tiers: updatedTiers,
+                bank: updatedBank,
+                row_metadata: updatedMeta,
+                updated_at: new Date().toISOString()
+              }).eq("id", b.id);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("Erro ao remover item de outros tabuleiros:", err);
+      }
+    }
+
+    // 4. Remove do cache do banco de imagens do site
+    if (siteBankItems) {
+      siteBankItems = siteBankItems.filter(i => {
+        if (i.id === targetId) return false;
+        if (targetSrc && i.src === targetSrc) return false;
+        if (cardId && i.cardId === cardId) return false;
+        return true;
+      });
+      renderSiteBank();
+    }
+
+    // 5. Salva tabuleiro ativo
+    if (activeBoardId && supabase) {
+      await autoSaveActiveBoard(`🌐 "${title}" removido de todo o site!`);
+    } else {
+      showAutoSaveToast(`🌐 "${title}" removido de todo o site!`);
+    }
+  }
+
+  function openInlineRatingCard(item, targetImgElement) {
+    if (!item || !inlineRatingCard) return;
 
     if (!item.id) {
       if (targetImgElement && targetImgElement.dataset.id) {
@@ -1278,222 +1464,238 @@
     }
     activeRatingItem = item;
 
-    if (inlineRatingItemTitle) {
-      inlineRatingItemTitle.textContent = item.title || "Item sem título";
+    // 1. Thumbnail do item
+    if (inlineCardItemThumb) {
+      const thumbSrc = item.src || (targetImgElement ? targetImgElement.src : "") || "";
+      inlineCardItemThumb.src = thumbSrc;
+      inlineCardItemThumb.style.display = thumbSrc ? "block" : "none";
     }
 
-    const editInlineItemTitleBtn = document.getElementById("edit-inline-item-title-btn");
-    const handleRename = () => {
-      const currentTitle = item.title && !item.title.toLowerCase().startsWith("image.") ? item.title : "";
-      const newTitle = prompt("Digite o título/nome deste item:", currentTitle);
-      if (newTitle !== null && newTitle.trim()) {
-        item.title = newTitle.trim();
-        if (inlineRatingItemTitle) inlineRatingItemTitle.textContent = item.title;
-        if (targetImgElement) targetImgElement.title = item.title;
+    // 2. Campo de input com o nome da imagem
+    if (inlineItemNameInput) {
+      inlineItemNameInput.value = item.title && !isGenericImageTitle(item.title) ? item.title : "";
+      inlineItemNameInput.placeholder = "Nome da imagem";
+    }
 
-        // Update title across board state
-        tiersData.forEach(t => {
-          (t.items || []).forEach(i => {
-            if (i.id === item.id || (i.src && i.src === item.src)) i.title = item.title;
-          });
-        });
-        bankData.forEach(i => {
-          if (i.id === item.id || (i.src && i.src === item.src)) i.title = item.title;
-        });
-        unvotedBankData.forEach(i => {
-          if (i.id === item.id || (i.src && i.src === item.src)) i.title = item.title;
-        });
-
-        saveBoardState();
-        autoSaveActiveBoard();
+    // 3. Controle da seção de votação
+    const isList = isListBoard();
+    const canVote = canUserVoteOnActiveBoard();
+    if (inlineRatingVotingSection) {
+      if (isList || !canVote) {
+        inlineRatingVotingSection.style.display = "none";
+      } else {
+        inlineRatingVotingSection.style.display = "flex";
       }
-    };
-
-    if (editInlineItemTitleBtn) {
-      editInlineItemTitleBtn.onclick = handleRename;
-    }
-    if (inlineRatingItemTitle) {
-      inlineRatingItemTitle.onclick = handleRename;
     }
 
-    const singleRatingContainer = document.getElementById("single-rating-container");
-    const parametersRatingContainer = document.getElementById("parameters-rating-container");
-    const inlineRatingValueLabel = document.getElementById("inline-rating-value-label");
+    if (!isList && canVote) {
+      const sessionUser = localStorage.getItem("roleta-nmdp-session") || "Anônimo";
+      const ratings = activeBoardRatings[item.id] || [];
+      const myRatingObj = ratings.find(r => (r.userName || "").toLowerCase() === sessionUser.toLowerCase());
+      const myCurrentScore = myRatingObj ? myRatingObj.score : 5.0;
+      const myParamScores = (myRatingObj && myRatingObj.paramScores) ? myRatingObj.paramScores : {};
 
-    const sessionUser = localStorage.getItem("roleta-nmdp-session") || "Anônimo";
-    const ratings = activeBoardRatings[item.id] || [];
-    const myRatingObj = ratings.find(r => (r.userName || "").toLowerCase() === sessionUser.toLowerCase());
-    const myCurrentScore = myRatingObj ? myRatingObj.score : 5.0;
-    const myParamScores = (myRatingObj && myRatingObj.paramScores) ? myRatingObj.paramScores : {};
+      const singleRatingContainer = document.getElementById("single-rating-container");
+      const parametersRatingContainer = document.getElementById("parameters-rating-container");
+      const inlineRatingValueLabel = document.getElementById("inline-rating-value-label");
 
-    if (Array.isArray(activeBoardParameters) && activeBoardParameters.length > 0) {
-      if (singleRatingContainer) singleRatingContainer.style.display = "none";
-      if (parametersRatingContainer) parametersRatingContainer.style.display = "flex";
-      if (inlineRatingValueLabel) inlineRatingValueLabel.style.display = "block";
+      if (Array.isArray(activeBoardParameters) && activeBoardParameters.length > 0) {
+        if (singleRatingContainer) singleRatingContainer.style.display = "none";
+        if (parametersRatingContainer) parametersRatingContainer.style.display = "flex";
+        if (inlineRatingValueLabel) inlineRatingValueLabel.style.display = "block";
 
-      if (parametersRatingContainer) {
-        parametersRatingContainer.innerHTML = "";
+        if (parametersRatingContainer) {
+          parametersRatingContainer.innerHTML = "";
 
-        const updateCalculatedAverage = () => {
-          const sliders = parametersRatingContainer.querySelectorAll(".param-rating-slider");
-          if (sliders.length === 0) return;
-          let sum = 0;
-          sliders.forEach(s => sum += Number(s.value));
-          const avg = Math.round((sum / sliders.length) * 10) / 10;
-          if (inlineRatingValue) {
-            inlineRatingValue.textContent = `${avg.toFixed(1)} / 10`;
-          }
-        };
+          const updateCalculatedAverage = () => {
+            const sliders = parametersRatingContainer.querySelectorAll(".param-rating-slider");
+            if (sliders.length === 0) return;
+            let sum = 0;
+            sliders.forEach(s => sum += Number(s.value));
+            const avg = Math.round((sum / sliders.length) * 10) / 10;
+            if (inlineRatingValue) {
+              inlineRatingValue.textContent = `${avg.toFixed(1)} / 10`;
+            }
+          };
 
-        activeBoardParameters.forEach(paramName => {
+          activeBoardParameters.forEach(paramName => {
+            const row = document.createElement("div");
+            row.style.display = "flex";
+            row.style.flexDirection = "column";
+            row.style.gap = "0.2rem";
+
+            const header = document.createElement("div");
+            header.style.display = "flex";
+            header.style.justifyContent = "space-between";
+            header.style.fontSize = "0.75rem";
+            header.style.fontWeight = "700";
+            header.style.color = "var(--text)";
+
+            const titleSpan = document.createElement("span");
+            titleSpan.textContent = paramName;
+
+            const valSpan = document.createElement("span");
+            valSpan.className = "param-value-badge";
+            valSpan.style.color = "#ffd700";
+            const initVal = myParamScores[paramName] !== undefined ? myParamScores[paramName] : myCurrentScore;
+            valSpan.textContent = `${Number(initVal).toFixed(1)} / 10`;
+
+            header.appendChild(titleSpan);
+            header.appendChild(valSpan);
+
+            const slider = document.createElement("input");
+            slider.type = "range";
+            slider.min = "0";
+            slider.max = "10";
+            slider.step = "0.1";
+            slider.value = initVal;
+            slider.className = "param-rating-slider";
+            slider.dataset.param = paramName;
+            slider.style.width = "100%";
+            slider.style.height = "6px";
+            slider.style.borderRadius = "3px";
+            slider.style.accentColor = "var(--accent)";
+            slider.style.cursor = "pointer";
+
+            slider.addEventListener("input", () => {
+              valSpan.textContent = `${Number(slider.value).toFixed(1)} / 10`;
+              updateCalculatedAverage();
+            });
+
+            row.appendChild(header);
+            row.appendChild(slider);
+            parametersRatingContainer.appendChild(row);
+          });
+
+          updateCalculatedAverage();
+        }
+      } else {
+        if (singleRatingContainer) singleRatingContainer.style.display = "block";
+        if (parametersRatingContainer) parametersRatingContainer.style.display = "none";
+        if (inlineRatingValueLabel) inlineRatingValueLabel.style.display = "none";
+
+        if (inlineRatingSlider) {
+          inlineRatingSlider.value = myCurrentScore;
+        }
+        if (inlineRatingValue) {
+          inlineRatingValue.textContent = `${Number(myCurrentScore).toFixed(1)} / 10`;
+        }
+      }
+
+      // Lista de votos registrados
+      let votesListContainer = document.getElementById("inline-rating-votes-list");
+      if (!votesListContainer) {
+        votesListContainer = document.createElement("div");
+        votesListContainer.id = "inline-rating-votes-list";
+        votesListContainer.style.marginTop = "0.5rem";
+        votesListContainer.style.borderTop = "1px solid rgba(255, 255, 255, 0.08)";
+        votesListContainer.style.paddingTop = "0.4rem";
+        votesListContainer.style.maxHeight = "110px";
+        votesListContainer.style.overflowY = "auto";
+        votesListContainer.style.fontSize = "0.75rem";
+        if (inlineRatingVotingSection) {
+          inlineRatingVotingSection.appendChild(votesListContainer);
+        }
+      }
+
+      votesListContainer.innerHTML = "";
+      if (ratings.length > 0) {
+        const isLele = canUserEditActiveBoard();
+        const vHeader = document.createElement("div");
+        vHeader.style.fontWeight = "700";
+        vHeader.style.fontSize = "0.7rem";
+        vHeader.style.marginBottom = "0.35rem";
+        vHeader.style.color = "var(--text-muted)";
+        vHeader.textContent = "Votos Registrados:";
+        votesListContainer.appendChild(vHeader);
+
+        ratings.forEach(r => {
           const row = document.createElement("div");
           row.style.display = "flex";
-          row.style.flexDirection = "column";
-          row.style.gap = "0.2rem";
+          row.style.justifyContent = "space-between";
+          row.style.alignItems = "center";
+          row.style.marginBottom = "0.25rem";
 
-          const header = document.createElement("div");
-          header.style.display = "flex";
-          header.style.justifyContent = "space-between";
-          header.style.fontSize = "0.75rem";
-          header.style.fontWeight = "700";
-          header.style.color = "var(--text)";
+          const text = document.createElement("span");
+          let paramSubtext = "";
+          if (r.paramScores && typeof r.paramScores === "object") {
+            const parts = Object.entries(r.paramScores).map(([k, v]) => `${k}: ${v}`);
+            if (parts.length > 0) {
+              paramSubtext = `<br/><span style="font-size: 0.68rem; color: var(--text-muted);">(${parts.join(", ")})</span>`;
+            }
+          }
+          text.innerHTML = `👤 <strong>${r.userName}</strong>: ⭐ ${r.score}/10${paramSubtext}`;
+          row.appendChild(text);
 
-          const titleSpan = document.createElement("span");
-          titleSpan.textContent = paramName;
+          if (isLele) {
+            const delBtn = document.createElement("button");
+            delBtn.type = "button";
+            delBtn.textContent = "🗑️";
+            delBtn.title = `Remover voto de ${r.userName}`;
+            delBtn.className = "btn-danger-sm";
+            delBtn.style.padding = "0.1rem 0.35rem";
+            delBtn.style.fontSize = "0.65rem";
+            delBtn.style.borderRadius = "4px";
 
-          const valSpan = document.createElement("span");
-          valSpan.className = "param-value-badge";
-          valSpan.style.color = "#ffd700";
-          const initVal = myParamScores[paramName] !== undefined ? myParamScores[paramName] : myCurrentScore;
-          valSpan.textContent = `${Number(initVal).toFixed(1)} / 10`;
+            delBtn.addEventListener("click", async (e) => {
+              e.stopPropagation();
+              closeInlineRatingCard();
+              await removeUserItemRating(item.id, r.userName);
+            });
 
-          header.appendChild(titleSpan);
-          header.appendChild(valSpan);
+            row.appendChild(delBtn);
+          }
 
-          const slider = document.createElement("input");
-          slider.type = "range";
-          slider.min = "0";
-          slider.max = "10";
-          slider.step = "0.1";
-          slider.value = initVal;
-          slider.className = "param-rating-slider";
-          slider.dataset.param = paramName;
-          slider.style.width = "100%";
-          slider.style.height = "6px";
-          slider.style.borderRadius = "3px";
-          slider.style.accentColor = "var(--accent)";
-          slider.style.cursor = "pointer";
-
-          slider.addEventListener("input", () => {
-            valSpan.textContent = `${Number(slider.value).toFixed(1)} / 10`;
-            updateCalculatedAverage();
-          });
-
-          row.appendChild(header);
-          row.appendChild(slider);
-          parametersRatingContainer.appendChild(row);
+          votesListContainer.appendChild(row);
         });
-
-        updateCalculatedAverage();
-      }
-    } else {
-      if (singleRatingContainer) singleRatingContainer.style.display = "block";
-      if (parametersRatingContainer) parametersRatingContainer.style.display = "none";
-      if (inlineRatingValueLabel) inlineRatingValueLabel.style.display = "none";
-
-      if (inlineRatingSlider) {
-        inlineRatingSlider.value = myCurrentScore;
-      }
-      if (inlineRatingValue) {
-        inlineRatingValue.textContent = `${Number(myCurrentScore).toFixed(1)} / 10`;
       }
     }
 
-    // Calculate position relative to targetImgElement
+    // 4. Configura botão de remover/adicionar na tier list
+    if (deleteInlineItemBtn) {
+      const isCurrentlyOnBoard = [
+        ...tiersData.flatMap(t => t.items || []),
+        ...bankData,
+        ...unvotedBankData
+      ].some(i => i.id === item.id || (item.src && i.src === item.src));
+
+      if (isCurrentlyOnBoard) {
+        deleteInlineItemBtn.textContent = "🗑️ Remover da Tier List";
+      } else {
+        deleteInlineItemBtn.textContent = "➕ Adicionar à Tier List";
+      }
+    }
+
+    // 5. Posicionamento inteligente relativo ao targetImgElement
     if (targetImgElement) {
       const rect = targetImgElement.getBoundingClientRect();
-      const cardWidth = 290;
+      const cardWidth = 320;
       
       let left = window.scrollX + rect.left + (rect.width / 2) - (cardWidth / 2);
       let top = window.scrollY + rect.bottom + 8;
 
-      // Ensure card stays within viewport
       if (left < 10) left = 10;
       if (left + cardWidth > window.innerWidth - 20) {
         left = window.innerWidth - cardWidth - 20;
       }
 
+      const estimatedHeight = isList || !canVote ? 200 : 380;
+      if (rect.bottom + estimatedHeight > window.innerHeight && rect.top > estimatedHeight) {
+        top = window.scrollY + rect.top - estimatedHeight - 8;
+      }
+      if (top < window.scrollY + 10) top = window.scrollY + 10;
+
       inlineRatingCard.style.left = `${left}px`;
       inlineRatingCard.style.top = `${top}px`;
     }
 
-    // Render list of votes with delete option for lele
-    let votesListContainer = document.getElementById("inline-rating-votes-list");
-    if (!votesListContainer) {
-      votesListContainer = document.createElement("div");
-      votesListContainer.id = "inline-rating-votes-list";
-      votesListContainer.style.marginTop = "0.75rem";
-      votesListContainer.style.borderTop = "1px solid var(--border)";
-      votesListContainer.style.paddingTop = "0.5rem";
-      votesListContainer.style.fontSize = "0.75rem";
-      votesListContainer.style.maxHeight = "120px";
-      votesListContainer.style.overflowY = "auto";
-      inlineRatingCard.appendChild(votesListContainer);
-    }
-
-    const isLele = loadSessionUser().toLowerCase() === "lele";
-    votesListContainer.innerHTML = "";
-
-    if (ratings.length > 0) {
-      const header = document.createElement("div");
-      header.style.fontWeight = "700";
-      header.style.marginBottom = "0.35rem";
-      header.style.color = "var(--text-muted)";
-      header.textContent = "Votos Registrados:";
-      votesListContainer.appendChild(header);
-
-      ratings.forEach(r => {
-        const row = document.createElement("div");
-        row.style.display = "flex";
-        row.style.justifyContent = "space-between";
-        row.style.alignItems = "center";
-        row.style.marginBottom = "0.25rem";
-
-        const text = document.createElement("span");
-        let paramSubtext = "";
-        if (r.paramScores && typeof r.paramScores === "object") {
-          const parts = Object.entries(r.paramScores).map(([k, v]) => `${k}: ${v}`);
-          if (parts.length > 0) {
-            paramSubtext = `<br/><span style="font-size: 0.68rem; color: var(--text-muted);">(${parts.join(", ")})</span>`;
-          }
-        }
-        text.innerHTML = `👤 <strong>${r.userName}</strong>: ⭐ ${r.score}/10${paramSubtext}`;
-        row.appendChild(text);
-
-        if (isLele) {
-          const delBtn = document.createElement("button");
-          delBtn.type = "button";
-          delBtn.textContent = "🗑️";
-          delBtn.title = `Remover voto de ${r.userName}`;
-          delBtn.className = "btn-danger-sm";
-          delBtn.style.padding = "0.1rem 0.35rem";
-          delBtn.style.fontSize = "0.65rem";
-          delBtn.style.borderRadius = "4px";
-
-          delBtn.addEventListener("click", async (e) => {
-            e.stopPropagation();
-            closeInlineRatingCard();
-            await removeUserItemRating(item.id, r.userName);
-          });
-
-          row.appendChild(delBtn);
-        }
-
-        votesListContainer.appendChild(row);
-      });
-    }
-
     inlineRatingCard.style.display = "flex";
+    if (inlineItemNameInput) {
+      setTimeout(() => {
+        inlineItemNameInput.focus();
+        inlineItemNameInput.select();
+      }, 50);
+    }
   }
 
   function closeInlineRatingCard() {
@@ -1506,6 +1708,22 @@
     closeInlineRatingBtn.addEventListener("click", closeInlineRatingCard);
   }
 
+  // Salvar alteração de nome pelo botão ou Enter
+  if (saveInlineItemNameBtn) {
+    saveInlineItemNameBtn.addEventListener("click", () => {
+      if (inlineItemNameInput) saveItemNewName(inlineItemNameInput.value);
+    });
+  }
+  if (inlineItemNameInput) {
+    inlineItemNameInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        saveItemNewName(inlineItemNameInput.value);
+      }
+    });
+  }
+
+  // Remover da Tier List
   if (deleteInlineItemBtn) {
     deleteInlineItemBtn.addEventListener("click", async () => {
       if (!activeRatingItem) return;
@@ -1513,20 +1731,34 @@
         alert("Apenas quem pode editar este tabuleiro pode remover itens dele.");
         return;
       }
-      const title = activeRatingItem.title || "este item";
-      if (!confirm(`Deseja realmente excluir "${title}" deste tabuleiro?`)) return;
 
       const targetId = activeRatingItem.id;
       const targetSrc = activeRatingItem.src;
+      const title = activeRatingItem.title || "este item";
+
+      const isCurrentlyOnBoard = [
+        ...tiersData.flatMap(t => t.items || []),
+        ...bankData,
+        ...unvotedBankData
+      ].some(i => i.id === targetId || (targetSrc && i.src === targetSrc));
+
+      if (!isCurrentlyOnBoard) {
+        closeInlineRatingCard();
+        await addSiteImageToBoard(activeRatingItem);
+        return;
+      }
+
+      if (!confirm(`Deseja realmente remover "${title}" desta Tier List?`)) return;
+
       closeInlineRatingCard();
 
-      // Remove os elementos visuais do tabuleiro
+      // Remove elementos visuais do DOM
       document.querySelectorAll(`.tier-item-wrapper[data-id="${targetId}"], .tier-item-img[data-id="${targetId}"]`).forEach(el => {
         const wrap = el.closest(".tier-item-wrapper") || el;
         wrap.remove();
       });
 
-      // Remove dos arrays em memória
+      // Remove dos arrays do tabuleiro
       tiersData.forEach(t => {
         if (Array.isArray(t.items)) {
           t.items = t.items.filter(i => i.id !== targetId && (!targetSrc || i.src !== targetSrc));
@@ -1540,10 +1772,29 @@
       }
 
       saveBoardState();
-      await autoSaveActiveBoard(`🗑️ "${title}" removido do tabuleiro!`);
+      await autoSaveActiveBoard(`🗑️ "${title}" removido da Tier List!`);
+
+      // Desmarca o tile no banco do site se renderizado
+      if (siteBankGrid) {
+        document.querySelectorAll(".site-bank-tile").forEach(tile => {
+          const tImg = tile.querySelector("img");
+          if (tImg && (tImg.src === targetSrc || tile.dataset.id === targetId)) {
+            tile.classList.remove("in-board");
+          }
+        });
+      }
     });
   }
 
+  // Remover do Banco de Imagens do Site (Global)
+  if (deleteGlobalItemBtn) {
+    deleteGlobalItemBtn.addEventListener("click", async () => {
+      if (!activeRatingItem) return;
+      await deleteItemFromGlobalSite(activeRatingItem);
+    });
+  }
+
+  // Confirmar Nota
   if (submitInlineRatingBtn) {
     submitInlineRatingBtn.addEventListener("click", async () => {
       if (!activeRatingItem) return;
@@ -1625,19 +1876,9 @@
 
     wrapper.appendChild(img);
 
-    // Click on item inside tier list row opens Floating Inline Rating Card Popover
+    // Click on item inside tier list row or bank opens Pop-up (Rename, Remove from board, Remove from site)
     img.addEventListener("click", (e) => {
       e.stopPropagation();
-      if (isListBoard()) {
-        // Listagem: sem notas. Quem pode editar apenas renomeia o item.
-        if (canUserEditActiveBoard()) renameListItem(item.id, img);
-        return;
-      }
-      if (!canUserVoteOnActiveBoard()) {
-        const creatorName = activeBoardCreatedBy || "o criador";
-        alert(`Apenas o criador deste tabuleiro (${creatorName}) pode votar nele.`);
-        return;
-      }
       openInlineRatingCard(item, img);
     });
 
@@ -3104,14 +3345,29 @@
 
       const imgWrap = document.createElement("div");
       imgWrap.className = "bank-tile__img";
+      imgWrap.style.cursor = "pointer";
+      imgWrap.title = "Clique para editar nome, remover da tier list ou remover do site";
       const img = document.createElement("img");
       img.alt = entry.title || "Imagem";
       img.draggable = false;
       imgWrap.appendChild(img);
 
+      imgWrap.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        const resolvedSrc = entry.src || (entry.cardId ? await fetchSiteCardImage(entry.cardId) : null) || img.src;
+        openInlineRatingCard({ ...entry, src: resolvedSrc || "" }, img);
+      });
+
       const titleEl = document.createElement("div");
       titleEl.className = "bank-tile__title" + (isGenericImageTitle(entry.title) ? " bank-tile__title--untitled" : "");
       titleEl.textContent = isGenericImageTitle(entry.title) ? "Sem título" : entry.title;
+      titleEl.style.cursor = "pointer";
+      titleEl.title = "Clique para editar nome, remover da tier list ou remover do site";
+      titleEl.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        const resolvedSrc = entry.src || (entry.cardId ? await fetchSiteCardImage(entry.cardId) : null) || img.src;
+        openInlineRatingCard({ ...entry, src: resolvedSrc || "" }, img);
+      });
 
       const originEl = document.createElement("div");
       originEl.className = "bank-tile__source";
@@ -3122,7 +3378,10 @@
       addBtn.className = "bank-tile__btn";
       addBtn.textContent = "➕ Adicionar";
       addBtn.title = "Adicionar ao banco deste tabuleiro";
-      addBtn.addEventListener("click", () => addSiteImageToBoard(entry, tile));
+      addBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        addSiteImageToBoard(entry, tile);
+      });
 
       tile.addEventListener("dragstart", (e) => {
         draggedSiteItem = { entry, tile };
