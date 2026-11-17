@@ -866,8 +866,13 @@
     }, 10000);
   }
 
-  async function autoSaveActiveBoard() {
-    if (!supabase || !activeBoardId) return;
+  async function autoSaveActiveBoard(customToastMessage) {
+    if (!supabase) return;
+    if (!activeBoardId) {
+      activeBoardId = "tl-" + Date.now().toString(36) + "-" + Math.random().toString(36).substr(2, 5);
+      if (deleteBoardBtn) deleteBoardBtn.style.display = "inline-block";
+      setupBoardRealtime();
+    }
 
     try {
       isSavingLocal = true;
@@ -931,7 +936,7 @@
       if (error) {
         console.warn("Erro ao auto-salvar tabuleiro no Supabase:", error);
       } else {
-        showAutoSaveToast("⭐ Voto e tabuleiro salvos automaticamente!");
+        showAutoSaveToast(customToastMessage || "⭐ Voto e tabuleiro salvos automaticamente!");
       }
     } catch (err) {
       console.warn("Erro ao auto-salvar tabuleiro:", err);
@@ -2575,6 +2580,21 @@
   }
 
   async function handleFilesUpload(files) {
+    if (!canUserEditActiveBoard()) {
+      alert("Apenas quem pode editar este tabuleiro consegue adicionar imagens ao banco dele.");
+      return;
+    }
+
+    let addedCount = 0;
+    let lastAddedTitle = "";
+
+    // Pre-carrega cache de cards para evitar duplicatas caso ainda não tenha sido consultado
+    if (supabase && !cachedDbCardsForSearch) {
+      await getDbCardsForSearch();
+    }
+
+    const onBoard = () => [...document.querySelectorAll(".tier-item-img")];
+
     for (const file of files) {
       if (!file.type.startsWith("image/")) continue;
       try {
@@ -2585,20 +2605,100 @@
         }
         const chosen = await askImageName(webpSrc, titleName);
         if (chosen === null) continue;
-        titleName = chosen;
+        titleName = (chosen || "").trim() || titleName;
+
+        // Evita duplicar a mesma imagem no tabuleiro atual
+        if (onBoard().some(img => img.src === webpSrc)) {
+          showAutoSaveToast(`Esta imagem ("${titleName}") já está no tabuleiro.`);
+          continue;
+        }
+
+        // Verifica se já existe um card global registrado com essa imagem
+        let cardId = null;
+        if (cachedDbCardsForSearch) {
+          const existingCard = cachedDbCardsForSearch.find(c => c.image_data_url === webpSrc);
+          if (existingCard) {
+            cardId = existingCard.id;
+          }
+        }
+
+        // Se não existir, cadastra como um novo card no banco global (tabela 'cards' do Supabase)
+        if (!cardId) {
+          const sessionUser = (loadSessionUser() || "lele").toLowerCase().trim() || "lele";
+          const rawCardId = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+          cardId = (sessionUser === "lele") ? rawCardId : `u_${sessionUser}__galeria_${rawCardId}`;
+
+          if (supabase) {
+            try {
+              const { error: cardErr } = await supabase.from("cards").insert([{
+                id: cardId,
+                title: titleName,
+                description: null,
+                image_data_url: webpSrc,
+                timestamp: Date.now(),
+                votes: 0
+              }]);
+
+              if (cardErr) {
+                console.warn("Aviso ao cadastrar card no banco global:", cardErr);
+              } else {
+                console.log(`Card "${titleName}" cadastrado no banco global (cards):`, cardId);
+                // Atualiza cache da busca rápida por título
+                if (cachedDbCardsForSearch) {
+                  cachedDbCardsForSearch.push({
+                    id: cardId,
+                    title: titleName,
+                    image_data_url: webpSrc,
+                    votes: 0
+                  });
+                }
+                // Atualiza o Banco de Imagens do Site na tela se estiver carregado
+                if (siteBankItems) {
+                  const alreadyPresent = siteBankItems.some(i => i.cardId === cardId || i.id === "item-" + cardId);
+                  if (!alreadyPresent) {
+                    siteBankItems.unshift({
+                      kind: "card",
+                      id: "item-" + cardId,
+                      cardId: cardId,
+                      title: titleName,
+                      src: webpSrc,
+                      origin: "Galeria"
+                    });
+                    siteBankCardImages.set(cardId, webpSrc);
+                    renderSiteBank();
+                  }
+                }
+              }
+            } catch (err) {
+              console.warn("Erro ao cadastrar card no Supabase:", err);
+            }
+          }
+        }
+
         const item = {
-          id: "item-" + Math.random().toString(36).slice(2, 9),
+          id: "item-" + cardId,
           src: webpSrc,
           title: titleName
         };
 
         const imgEl = createItemElement(item);
         bankContainer.appendChild(imgEl);
+        addedCount++;
+        lastAddedTitle = titleName;
       } catch (err) {
         console.error("Erro ao converter arquivo:", file.name, err);
       }
     }
-    saveBoardState();
+
+    if (addedCount > 0) {
+      saveBoardState();
+      if (supabase) {
+        const toastMsg = addedCount === 1
+          ? `🖼️ "${lastAddedTitle}" adicionado ao tabuleiro e ao banco do site!`
+          : `🖼️ ${addedCount} imagens adicionadas ao tabuleiro e ao banco do site!`;
+        await autoSaveActiveBoard(toastMsg);
+      }
+    }
   }
 
   // Setup drag-and-drop & clipboard paste file upload triggers
