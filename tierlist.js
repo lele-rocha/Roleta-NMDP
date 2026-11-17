@@ -2595,18 +2595,13 @@
           titleName = "Novo Item";
         }
 
-        // Abre a janela para nomear a imagem IMEDIATAMENTE (sem travas ou chamadas de rede antes)
+        // Abre a janela para nomear a imagem IMEDIATAMENTE
         const chosen = await askImageName(webpSrc, titleName);
         if (chosen === null) continue;
         titleName = (chosen || "").trim() || titleName;
 
-        // 1. Gera id único do card e do item
-        const sessionUser = (loadSessionUser() || "lele").toLowerCase().trim() || "lele";
-        const rawCardId = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-        const cardId = (sessionUser === "lele") ? rawCardId : `u_${sessionUser}__galeria_${rawCardId}`;
-        const itemId = "item-" + cardId;
+        const itemId = "item-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 
-        // 2. Insere o elemento na tela imediatamente
         const item = {
           id: itemId,
           src: webpSrc,
@@ -2618,46 +2613,19 @@
         addedCount++;
         lastAddedTitle = titleName;
 
-        // 3. Cadastra no banco global (tabela 'cards' do Supabase) em background
-        if (supabase) {
-          supabase.from("cards").insert([{
-            id: cardId,
-            title: titleName,
-            description: null,
-            image_data_url: webpSrc,
-            timestamp: Date.now(),
-            votes: 0
-          }]).then(({ error }) => {
-            if (error) {
-              console.warn("Aviso ao cadastrar card no banco global:", error);
-            } else {
-              console.log(`Card "${titleName}" gravado no banco global com sucesso.`);
-              // Se o Banco de Imagens do Site estiver carregado na tela, adiciona no topo
-              if (siteBankItems) {
-                const alreadyPresent = siteBankItems.some(i => i.cardId === cardId || i.id === itemId);
-                if (!alreadyPresent) {
-                  siteBankItems.unshift({
-                    kind: "card",
-                    id: itemId,
-                    cardId: cardId,
-                    title: titleName,
-                    src: webpSrc,
-                    origin: "Galeria"
-                  });
-                  siteBankCardImages.set(cardId, webpSrc);
-                  renderSiteBank();
-                }
-              }
-              if (cachedDbCardsForSearch) {
-                cachedDbCardsForSearch.push({
-                  id: cardId,
-                  title: titleName,
-                  image_data_url: webpSrc,
-                  votes: 0
-                });
-              }
-            }
-          }).catch(err => console.warn("Erro ao cadastrar card no Supabase:", err));
+        // Se o Banco de Imagens do Site estiver aberto na tela, adiciona na hora
+        if (siteBankItems) {
+          const alreadyPresent = siteBankItems.some(i => i.id === itemId || (i.src && i.src === webpSrc));
+          if (!alreadyPresent) {
+            siteBankItems.unshift({
+              kind: "tier",
+              id: itemId,
+              title: titleName,
+              src: webpSrc,
+              origin: `Tier List: ${boardTitle || "Atual"}`
+            });
+            renderSiteBank();
+          }
         }
       } catch (err) {
         console.error("Erro ao converter arquivo:", file.name, err);
@@ -2668,61 +2636,10 @@
       saveBoardState();
       if (supabase) {
         const toastMsg = addedCount === 1
-          ? `🖼️ "${lastAddedTitle}" adicionado ao tabuleiro e ao banco do site!`
-          : `🖼️ ${addedCount} imagens adicionadas ao tabuleiro e ao banco do site!`;
+          ? `🖼️ "${lastAddedTitle}" adicionado ao tabuleiro e salvo!`
+          : `🖼️ ${addedCount} imagens adicionadas ao tabuleiro e salvas!`;
         autoSaveActiveBoard(toastMsg);
       }
-    }
-  }
-
-  // Sincroniza qualquer imagem com dataURL presente no tabuleiro que ainda não tenha card global
-  async function syncBoardItemsToGlobalBank() {
-    if (!supabase) return;
-    try {
-      const allItems = [
-        ...tiersData.flatMap(t => t.items || []),
-        ...bankData,
-        ...unvotedBankData
-      ];
-      for (const it of allItems) {
-        if (!it || !it.src || !it.title || isGenericImageTitle(it.title)) continue;
-        if (typeof it.src === "string" && it.src.startsWith("data:image")) {
-          let cardId = (it.id && it.id.startsWith("item-")) ? it.id.slice(5) : null;
-          if (!cardId) {
-            cardId = "card_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-            it.id = "item-" + cardId;
-          }
-          const { data: existing } = await supabase.from("cards").select("id").eq("id", cardId).maybeSingle();
-          if (!existing) {
-            await supabase.from("cards").insert([{
-              id: cardId,
-              title: it.title,
-              description: null,
-              image_data_url: it.src,
-              timestamp: Date.now(),
-              votes: 0
-            }]);
-            console.log(`Item existente "${it.title}" sincronizado para o banco global.`);
-            if (siteBankItems) {
-              const already = siteBankItems.some(i => i.cardId === cardId || i.id === "item-" + cardId);
-              if (!already) {
-                siteBankItems.unshift({
-                  kind: "card",
-                  id: "item-" + cardId,
-                  cardId: cardId,
-                  title: it.title,
-                  src: it.src,
-                  origin: "Galeria"
-                });
-                siteBankCardImages.set(cardId, it.src);
-              }
-            }
-          }
-        }
-      }
-      if (siteBankItems) renderSiteBank();
-    } catch (e) {
-      console.warn("Aviso ao sincronizar itens do tabuleiro para o banco global:", e);
     }
   }
 
@@ -5043,9 +4960,6 @@ CREATE POLICY "Allow delete" ON public.tier_lists FOR DELETE USING (true);</pre>
       renderBank();
       renderUnvotedBank();
       setupBoardRealtime();
-      if (supabase) {
-        setTimeout(syncBoardItemsToGlobalBank, 1500);
-      }
       
       if (activeBoardId) {
         deleteBoardBtn.style.display = "inline-block";
